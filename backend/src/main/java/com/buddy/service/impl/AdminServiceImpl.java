@@ -1,0 +1,297 @@
+package com.buddy.service.impl;
+
+import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buddy.common.constant.ApplyStatus;
+import com.buddy.common.constant.PostStatus;
+import com.buddy.common.exception.BusinessException;
+import com.buddy.common.result.ResultCode;
+import com.buddy.dto.response.PostVO;
+import com.buddy.dto.response.UserVO;
+import com.buddy.entity.*;
+import com.buddy.mapper.*;
+import com.buddy.service.AdminService;
+import com.buddy.service.CreditService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * 管理后台服务实现类
+ */
+@Service
+public class AdminServiceImpl implements AdminService {
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private PostMapper postMapper;
+
+    @Autowired
+    private PostApplyMapper postApplyMapper;
+
+    @Autowired
+    private PostCommentMapper postCommentMapper;
+
+    @Autowired
+    private ReviewMapper reviewMapper;
+
+    @Autowired
+    private CreditService creditService;
+
+    @Override
+    public IPage<UserVO> getUserList(int page, int size, String keyword) {
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        if (StrUtil.isNotBlank(keyword)) {
+            wrapper.and(w -> w
+                    .like(User::getNickname, keyword)
+                    .or().like(User::getStudentNo, keyword)
+                    .or().like(User::getPhone, keyword)
+            );
+        }
+        wrapper.orderByDesc(User::getCreatedTime);
+
+        IPage<User> userPage = userMapper.selectPage(new Page<>(page, size), wrapper);
+
+        // 转换为UserVO
+        IPage<UserVO> voPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
+        voPage.setRecords(userPage.getRecords().stream()
+                .map(this::convertToUserVO)
+                .collect(Collectors.toList()));
+        return voPage;
+    }
+
+    @Override
+    public UserVO getUserDetail(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        return convertToUserVO(user);
+    }
+
+    @Override
+    public IPage<PostVO> getUserPosts(Long userId, int page, int size) {
+        LambdaQueryWrapper<Post> wrapper = new LambdaQueryWrapper<Post>()
+                .eq(Post::getPublisherId, userId)
+                .orderByDesc(Post::getCreatedTime);
+        IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);
+
+        IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
+        voPage.setRecords(postPage.getRecords().stream()
+                .map(this::convertToPostVO)
+                .collect(Collectors.toList()));
+        return voPage;
+    }
+
+    @Override
+    public IPage<Map<String, Object>> getUserApplies(Long userId, int page, int size) {
+        LambdaQueryWrapper<PostApply> wrapper = new LambdaQueryWrapper<PostApply>()
+                .eq(PostApply::getApplicantId, userId)
+                .orderByDesc(PostApply::getApplyTime);
+        IPage<PostApply> applyPage = postApplyMapper.selectPage(new Page<>(page, size), wrapper);
+
+        IPage<Map<String, Object>> resultPage = new Page<>(applyPage.getCurrent(), applyPage.getSize(), applyPage.getTotal());
+        resultPage.setRecords(applyPage.getRecords().stream().map(apply -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", apply.getId());
+            map.put("postId", apply.getPostId());
+            map.put("status", apply.getStatus());
+            map.put("applyTime", apply.getApplyTime());
+            map.put("handleTime", apply.getHandleTime());
+            // 查询帖子标题
+            Post post = postMapper.selectById(apply.getPostId());
+            if (post != null) {
+                map.put("postTitle", post.getTitle());
+            }
+            return map;
+        }).collect(Collectors.toList()));
+        return resultPage;
+    }
+
+    @Override
+    public IPage<Map<String, Object>> getUserReviews(Long userId, int page, int size) {
+        // 查询该用户收到的评价
+        LambdaQueryWrapper<Review> wrapper = new LambdaQueryWrapper<Review>()
+                .eq(Review::getTargetUserId, userId)
+                .orderByDesc(Review::getCreatedTime);
+        IPage<Review> reviewPage = reviewMapper.selectPage(new Page<>(page, size), wrapper);
+
+        IPage<Map<String, Object>> resultPage = new Page<>(reviewPage.getCurrent(), reviewPage.getSize(), reviewPage.getTotal());
+        resultPage.setRecords(reviewPage.getRecords().stream().map(review -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", review.getId());
+            map.put("postId", review.getPostId());
+            map.put("reviewerId", review.getReviewerId());
+            map.put("rating", review.getRating());
+            map.put("tag", review.getTag());
+            map.put("content", review.getContent());
+            map.put("createdTime", review.getCreatedTime());
+            // 查询评价人昵称
+            User reviewer = userMapper.selectById(review.getReviewerId());
+            if (reviewer != null) {
+                map.put("reviewerNickname", reviewer.getNickname());
+            }
+            // 查询帖子标题
+            Post post = postMapper.selectById(review.getPostId());
+            if (post != null) {
+                map.put("postTitle", post.getTitle());
+            }
+            return map;
+        }).collect(Collectors.toList()));
+        return resultPage;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void banUser(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        user.setStatus(0);
+        userMapper.updateById(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unbanUser(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        user.setStatus(1);
+        userMapper.updateById(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void resetCredit(Long userId, Integer creditScore) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        user.setCreditScore(creditScore);
+        userMapper.updateById(user);
+    }
+
+    @Override
+    public IPage<PostVO> getPostList(int page, int size, String status, String category, Integer isAuditPass) {
+        LambdaQueryWrapper<Post> wrapper = new LambdaQueryWrapper<>();
+
+        if (StrUtil.isNotBlank(status)) {
+            wrapper.eq(Post::getStatus, status);
+        }
+        if (StrUtil.isNotBlank(category)) {
+            wrapper.eq(Post::getCategory, category);
+        }
+        if (isAuditPass != null) {
+            wrapper.eq(Post::getIsAuditPass, isAuditPass);
+        }
+        wrapper.orderByDesc(Post::getCreatedTime);
+
+        IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);
+
+        // 转换为PostVO
+        IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
+        voPage.setRecords(postPage.getRecords().stream()
+                .map(this::convertToPostVO)
+                .collect(Collectors.toList()));
+        return voPage;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void takedownPost(Long postId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        // 下架即将帖子状态设为CANCELLED
+        post.setStatus(PostStatus.CANCELLED);
+        postMapper.updateById(post);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void auditPost(Long postId, boolean pass) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        post.setIsAuditPass(pass ? 1 : 0);
+        postMapper.updateById(post);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deletePost(Long postId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        // 物理删除：先删关联数据，再删帖子
+        postApplyMapper.delete(new LambdaQueryWrapper<PostApply>().eq(PostApply::getPostId, postId));
+        postCommentMapper.delete(new LambdaQueryWrapper<PostComment>().eq(PostComment::getPostId, postId));
+        reviewMapper.delete(new LambdaQueryWrapper<Review>().eq(Review::getPostId, postId));
+        postMapper.deleteById(postId);
+    }
+
+    /**
+     * 将User实体转换为UserVO
+     */
+    private UserVO convertToUserVO(User user) {
+        UserVO vo = new UserVO();
+        vo.setId(user.getId());
+        vo.setStudentNo(user.getStudentNo());
+        vo.setPhone(user.getPhone());
+        vo.setNickname(user.getNickname());
+        vo.setAvatar(user.getAvatar());
+        vo.setSignature(user.getSignature());
+        vo.setCollege(user.getCollege());
+        vo.setGender(user.getGender());
+        vo.setCreditScore(user.getCreditScore());
+        vo.setCreditLevel(creditService.getCreditLevel(user.getCreditScore()));
+        vo.setCreditLabel(creditService.getCreditLabel(user.getCreditScore()));
+        vo.setStatus(user.getStatus());
+        vo.setCreatedTime(user.getCreatedTime());
+        return vo;
+    }
+
+    /**
+     * 将Post实体转换为PostVO
+     */
+    private PostVO convertToPostVO(Post post) {
+        PostVO vo = new PostVO();
+        vo.setId(post.getId());
+        vo.setTitle(post.getTitle());
+        vo.setCategory(post.getCategory());
+        vo.setTagIds(post.getTagIds());
+        vo.setStartTime(post.getStartTime());
+        vo.setEndTime(post.getEndTime());
+        vo.setLocation(post.getLocation());
+        vo.setMaxPeople(post.getMaxPeople());
+        vo.setCurrentPeople(post.getCurrentPeople());
+        vo.setStatus(post.getStatus());
+        vo.setViewCount(post.getViewCount());
+        vo.setPublisherId(post.getPublisherId());
+        vo.setCreatedTime(post.getCreatedTime());
+
+        // 查询发布者信息
+        User publisher = userMapper.selectById(post.getPublisherId());
+        if (publisher != null) {
+            vo.setPublisherNickname(publisher.getNickname());
+            vo.setPublisherAvatar(publisher.getAvatar());
+            vo.setPublisherCreditLevel(creditService.getCreditLevel(publisher.getCreditScore()));
+        }
+        return vo;
+    }
+}

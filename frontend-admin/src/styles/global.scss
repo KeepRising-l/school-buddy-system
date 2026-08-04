@@ -1,0 +1,121 @@
+// ============================================================
+// 管理端全局样式 —— 与 H5 统一的高端柔和风（Soft Structuralism）
+// 主色翡翠 #10A37F · 冷银白背景 · 柔和圆角
+// ============================================================
+
+// ----- Element Plus 主题覆写（CSS 变量，全局生效）-----
+:root {
+  // 主色（Element Plus 变量体系）
+  --el-color-primary: #10a37f;
+  --el-color-primary-light-3: #43b899;
+  --el-color-primary-light-5: #72ccb2;
+  --el-color-primary-light-7: #a5dfcd;
+  --el-color-primary-light-8: #c2e9dd;
+  --el-color-primary-light-9: #e9f7f2;
+  --el-color-primary-dark-2: #0d8a6b;
+
+  // 语义色微调（更柔和）
+  --el-color-success: #10a37f;
+  --el-color-success-light-9: #e9f7f2;
+  --el-color-warning: #f5a623;
+  --el-color-warning-light-9: #fdf3e0;
+  --el-color-danger: #e5484d;
+  --el-color-danger-light-9: #fcedee;
+  --el-color-info: #9ca3af;
+  --el-color-info-light-9: #f3f4f6;
+
+  // 文字与背景
+  --el-text-color-primary: #14161a;
+  --el-text-color-regular: #374151;
+  --el-text-color-secondary: #6b7280;
+  --el-text-color-placeholder: #9ca3af;
+
+  // 圆角
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-border-radius-round: 999px;
+
+  // 边框
+  --el-border-color: rgba(0, 0, 0, 0.08);
+  --el-border-color-light: rgba(0, 0, 0, 0.06);
+  --el-border-color-lighter: rgba(0, 0, 0, 0.04);
+
+  // 主区背景
+  --el-bg-color-page: #f6f7f9;
+  --el-bg-color: #ffffff;
+
+  // 阴影（更扩散柔和）
+  --el-box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.12);
+  --el-box-shadow-light: 0 8px 20px -12px rgba(0, 0, 0, 0.08);
+  --el-box-shadow-lighter: 0 4px 12px -8px rgba(0, 0, 0, 0.06);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'MiSans', 'Helvetica Neue',
+    'Microsoft YaHei', sans-serif;
+  background: var(--el-bg-color-page);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+// 滚动条美化
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// 通用样式
+.page-container {
+  padding: 20px;
+}
+
+.search-bar {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pagination-wrapper {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+// 卡片基础：柔和圆角 + 扩散阴影
+.el-card {
+  --el-card-border-radius: 16px;
+  border-color: var(--el-border-color-lighter);
+}
+
+// 无障碍：尊重系统减弱动效
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,21 @@
+# =====================================================
+# 本地开发环境配置模板（此文件可以提交到仓库）
+#
+# 使用方法：
+#   1. 把本文件复制一份，命名为 application-local.yml
+#      命令（Windows PowerShell）：
+#         Copy-Item application-local.example.yml application-local.yml
+#      或直接在文件管理器里复制粘贴并改名
+#   2. 打开 application-local.yml，把下面两个占位值改成你自己的
+#   3. application-local.yml 已经在 .gitignore 里，不会被提交到仓库
+# =====================================================
+spring:
+  datasource:
+    # 你的 MySQL root 密码（改成你自己的！）
+    password: your_mysql_password_here
+
+jwt:
+  # JWT 签名密钥（改成你自己的随机长字符串，至少 32 个字符）
+  # 可以用下面的命令生成一个随机密钥（Git Bash）：
+  #   openssl rand -base64 48
+  secret: your_jwt_secret_here_at_least_32_chars

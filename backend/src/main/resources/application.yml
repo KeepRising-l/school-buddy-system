@@ -1,0 +1,33 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: dev,local
+  # Jackson 配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.buddy.entity
+  configuration:
+    # 下划线转驼峰
+    map-underscore-to-camel-case: true
+    # 日志输出
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 主键策略
+      id-type: auto
+
+# JWT 配置
+jwt:
+  # 密钥从环境变量读取；未设置时由 local profile 提供
+  # 本地开发请把真实密钥填在 application-local.yml（已被 gitignore）
+  secret: ${JWT_SECRET:}
+  # Token 过期时间：7天（毫秒）
+  expiration: 604800000

@@ -1,0 +1,245 @@
+// ============================================================
+// 设计 Token —— 高端柔和风（Soft Structuralism）
+// 主色 #10A37F 深翡翠 · 冷银白背景 · 扩散阴影 · squircle 圆角
+// ============================================================
+:root {
+  // ----- 品牌色 -----
+  --primary: #10a37f;
+  --primary-dark: #0d8a6b;
+  --primary-soft: #e9f7f2; // 柔和翡翠底（chip active / 浅色 tag）
+  --primary-gradient: linear-gradient(135deg, #10a37f 0%, #0d8a6b 100%);
+
+  // ----- 语义色 -----
+  --danger: #e5484d;
+  --warning: #f5a623;
+  --success: #10a37f;
+  --info: #3b82f6;
+
+  // ----- 表面 -----
+  --bg-page: #f6f7f9;
+  --bg-card: #ffffff;
+  --bg-grey: #f3f4f6;
+
+  // ----- 文字 -----
+  --text-primary: #14161a;
+  --text-secondary: #6b7280;
+  --text-hint: #9ca3af;
+  --text-disabled: #c7cad1;
+
+  // ----- 边框 -----
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.04);
+
+  // ----- 阴影（极度扩散）-----
+  --shadow-card: 0 20px 40px -20px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 24px 48px -20px rgba(0, 0, 0, 0.12);
+  --shadow-float: 0 20px 48px -24px rgba(16, 163, 127, 0.3);
+  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.04);
+
+  // ----- 圆角 -----
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-round: 999px;
+
+  // ----- 动效 -----
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --transition: all 0.3s var(--ease);
+
+  // ============================================================
+  // Vant 4 主题覆写（不改组件源码，全走 CSS 变量）
+  // ============================================================
+  --van-primary-color: #10a37f;
+  --van-success-color: #10a37f;
+  --van-warning-color: #f5a623;
+  --van-danger-color: #e5484d;
+  --van-background: #f6f7f9;
+  --van-background-2: #ffffff;
+  --van-background-3: #ffffff;
+  --van-text-color: #14161a;
+  --van-text-color-2: #6b7280;
+  --van-text-color-3: #9ca3af;
+  --van-border-color: rgba(0, 0, 0, 0.08);
+  --van-active-color: rgba(0, 0, 0, 0.04);
+  --van-active-opacity: 0.85;
+
+  // Button —— pill 全圆角
+  --van-button-border-radius: 999px;
+  --van-button-primary-background: #10a37f;
+  --van-button-primary-border-color: #10a37f;
+
+  // NavBar
+  --van-nav-bar-height: 48px;
+  --van-nav-bar-background: #ffffff;
+  --van-nav-bar-icon-color: #14161a;
+  --van-nav-bar-title-font-size: 16px;
+  --van-nav-bar-title-text-color: #14161a;
+
+  // Field
+  --van-field-label-color: #14161a;
+  --van-field-input-text-color: #14161a;
+  --van-field-placeholder-text-color: #9ca3af;
+  --van-field-clear-icon-color: #c7cad1;
+
+  // Cell / CellGroup
+  --van-cell-background: #ffffff;
+  --van-cell-text-color: #14161a;
+  --van-cell-group-background: transparent;
+
+  // Tabbar（悬浮胶囊在组件内覆盖，这里兜底）
+  --van-tabbar-background: rgba(255, 255, 255, 0.88);
+  --van-tabbar-item-text-color: #9ca3af;
+  --van-tabbar-item-active-color: #10a37f;
+
+  // Tabs
+  --van-tabs-nav-background: transparent;
+  --van-tab-text-color: #9ca3af;
+  --van-tab-active-text-color: #14161a;
+  --van-tabs-bottom-bar-color: #10a37f;
+  --van-tabs-bottom-bar-width: 1em;
+  --van-tabs-bottom-bar-height: 3px;
+
+  // Tag
+  --van-tag-primary-color: #10a37f;
+  --van-tag-success-color: #10a37f;
+  --van-tag-warning-color: #f5a623;
+  --van-tag-danger-color: #e5484d;
+  --van-tag-default-color: #9ca3af;
+  --van-tag-plain-background: #ffffff;
+  --van-tag-text-color: #ffffff;
+
+  // Search
+  --van-search-background: transparent;
+  --van-search-content-background: #f3f4f6;
+
+  // Popup / Dialog / Toast
+  --van-popup-background: #ffffff;
+  --van-dialog-background: #ffffff;
+  --van-toast-background: rgba(20, 22, 26, 0.85);
+
+  // Switch
+  --van-switch-on-background: #10a37f;
+}
+
+// ----- 基础重置 -----
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100vh;
+  font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'MiSans', 'Helvetica Neue',
+    'Microsoft YaHei', sans-serif;
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  color: var(--text-primary);
+}
+
+// ----- 页面通用容器 -----
+.page {
+  min-height: 100vh;
+  background: var(--bg-page);
+}
+
+// 带底部导航的页面容器
+.page-with-tabbar {
+  padding-bottom: 84px; // 给悬浮胶囊留足空间
+}
+
+// 内容区域
+.content {
+  padding: 12px 16px;
+}
+
+// ----- 卡片：squircle + 扩散阴影 -----
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.3s var(--ease), transform 0.3s var(--ease);
+}
+
+// ----- 通用按钮触觉反馈（press scale）-----
+.van-button {
+  transition: transform 0.15s var(--ease), box-shadow 0.3s var(--ease),
+    opacity 0.2s var(--ease);
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+// ----- 文字截断 -----
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+// ----- 安全区域 -----
+.safe-area-bottom {
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+// ----- 通用过渡 -----
+.transition-all {
+  transition: all 0.3s var(--ease);
+}
+
+// ----- 分割线 -----
+.divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 12px 0;
+}
+
+// ----- 文字选中色 -----
+::selection {
+  background: rgba(16, 163, 127, 0.2);
+}
+
+// ----- 路由过渡动画（App.vue 使用）-----
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+// ----- 无障碍：尊重系统减弱动效 -----
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
