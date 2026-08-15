@@ -208,9 +208,10 @@ const handleReset = () => {
   loadData()
 }
 
-// 查看详情
+// 查看详情（H5 用户端地址，管理端无此路由；支持 VITE_H5_BASE 环境变量覆盖）
 const handleView = (row) => {
-  window.open(`/post/${row.id}`, '_blank')
+  const h5Base = import.meta.env.VITE_H5_BASE || 'http://localhost:3000'
+  window.open(`${h5Base}/post/${row.id}`, '_blank')
 }
 
 // 审核帖子

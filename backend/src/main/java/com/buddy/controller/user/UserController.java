@@ -2,7 +2,9 @@ package com.buddy.controller.user;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.buddy.common.context.UserContext;
+import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.R;
+import com.buddy.common.result.ResultCode;
 import com.buddy.dto.request.ProfileUpdateRequest;
 import com.buddy.dto.response.ApplyVO;
 import com.buddy.dto.response.PostVO;
@@ -14,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -62,10 +65,33 @@ public class UserController {
     @PutMapping("/tags")
     public R<Void> setUserTags(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        @SuppressWarnings("unchecked")
-        List<Long> tagIds = (List<Long>) body.get("tagIds");
-        @SuppressWarnings("unchecked")
-        List<Integer> levels = (List<Integer>) body.get("levels");
+        // 修复：JSON 数组数字被反序列化为 Integer，直接强转 List<Long> 会 ClassCastException
+        // 统一按 Number 解析，避免"设置标签必失败"的 bug
+        Object tagIdsObj = body == null ? null : body.get("tagIds");
+        Object levelsObj = body == null ? null : body.get("levels");
+        if (!(tagIdsObj instanceof List) || !(levelsObj instanceof List)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "标签参数格式不正确");
+        }
+        List<?> tagIdsRaw = (List<?>) tagIdsObj;
+        List<?> levelsRaw = (List<?>) levelsObj;
+        if (tagIdsRaw.isEmpty() || tagIdsRaw.size() != levelsRaw.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "标签与段位数量不一致");
+        }
+        List<Long> tagIds = new ArrayList<>();
+        List<Integer> levels = new ArrayList<>();
+        for (int i = 0; i < tagIdsRaw.size(); i++) {
+            Object tid = tagIdsRaw.get(i);
+            Object lv = levelsRaw.get(i);
+            if (!(tid instanceof Number) || !(lv instanceof Number)) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "标签参数不合法");
+            }
+            tagIds.add(((Number) tid).longValue());
+            int level = ((Number) lv).intValue();
+            if (level < 1 || level > 5) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "段位必须在1-5之间");
+            }
+            levels.add(level);
+        }
         userService.setUserTags(userId, tagIds, levels);
         return R.ok();
     }

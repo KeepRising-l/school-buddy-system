@@ -2,7 +2,9 @@ package com.buddy.controller.user;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.buddy.common.context.UserContext;
+import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.R;
+import com.buddy.common.result.ResultCode;
 import com.buddy.dto.response.ApplyVO;
 import com.buddy.service.ApplyService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +30,7 @@ public class ApplyController {
     @PostMapping("/join")
     public R<Void> apply(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        Long postId = Long.valueOf(body.get("postId").toString());
+        Long postId = parsePostId(body);
         applyService.apply(userId, postId);
         return R.ok();
     }
@@ -40,9 +42,24 @@ public class ApplyController {
     @PostMapping("/waitlist")
     public R<Void> waitlist(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        Long postId = Long.valueOf(body.get("postId").toString());
+        Long postId = parsePostId(body);
         applyService.waitlist(userId, postId);
         return R.ok();
+    }
+
+    /**
+     * 解析请求体中的 postId，参数缺失/不合法时给出明确提示（防 NPE 500）
+     */
+    private Long parsePostId(Map<String, Object> body) {
+        Object postIdObj = body == null ? null : body.get("postId");
+        if (postIdObj == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "缺少帖子ID");
+        }
+        try {
+            return Long.valueOf(postIdObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "帖子ID不合法");
+        }
     }
 
     /**
@@ -102,7 +119,21 @@ public class ApplyController {
     @PostMapping("/attendance/{id}")
     public R<Void> markAttendance(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        boolean attended = Boolean.parseBoolean(body.get("attended").toString());
+        Object attendedObj = body == null ? null : body.get("attended");
+        if (attendedObj == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "缺少出勤标记参数");
+        }
+        // 修复：parseBoolean("abc") 会静默返回 false（语义反转），改为严格校验
+        boolean attended;
+        if (attendedObj instanceof Boolean) {
+            attended = (Boolean) attendedObj;
+        } else if ("true".equalsIgnoreCase(attendedObj.toString())) {
+            attended = true;
+        } else if ("false".equalsIgnoreCase(attendedObj.toString())) {
+            attended = false;
+        } else {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "出勤标记参数不合法");
+        }
         applyService.markAttendance(userId, id, attended);
         return R.ok();
     }

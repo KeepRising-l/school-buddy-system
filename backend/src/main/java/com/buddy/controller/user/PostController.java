@@ -2,7 +2,9 @@ package com.buddy.controller.user;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.buddy.common.context.UserContext;
+import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.R;
+import com.buddy.common.result.ResultCode;
 import com.buddy.dto.request.PostCreateRequest;
 import com.buddy.dto.response.CommentVO;
 import com.buddy.dto.response.PostDetailVO;
@@ -64,9 +66,19 @@ public class PostController {
     @PostMapping("/comment")
     public R<Void> addComment(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        Long postId = Long.valueOf(body.get("postId").toString());
-        String content = (String) body.get("content");
-        commentService.addComment(userId, postId, content);
+        Object postIdObj = body.get("postId");
+        Object contentObj = body.get("content");
+        // 防御：参数缺失时给明确提示，而不是 NPE 500
+        if (postIdObj == null || contentObj == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "评论参数不完整");
+        }
+        Long postId;
+        try {
+            postId = Long.valueOf(postIdObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "帖子ID不合法");
+        }
+        commentService.addComment(userId, postId, (String) contentObj);
         return R.ok();
     }
 

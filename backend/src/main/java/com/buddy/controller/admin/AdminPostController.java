@@ -2,7 +2,9 @@ package com.buddy.controller.admin;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.buddy.common.annotation.RequireAdmin;
+import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.R;
+import com.buddy.common.result.ResultCode;
 import com.buddy.dto.response.PostVO;
 import com.buddy.service.AdminService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +53,20 @@ public class AdminPostController {
     @RequireAdmin
     @PostMapping("/audit/{id}")
     public R<Void> auditPost(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        boolean pass = Boolean.parseBoolean(body.get("pass").toString());
+        Object passObj = body == null ? null : body.get("pass");
+        if (passObj == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "缺少审核结果参数");
+        }
+        boolean pass;
+        if (passObj instanceof Boolean) {
+            pass = (Boolean) passObj;
+        } else if ("true".equalsIgnoreCase(passObj.toString())) {
+            pass = true;
+        } else if ("false".equalsIgnoreCase(passObj.toString())) {
+            pass = false;
+        } else {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "审核结果参数不合法");
+        }
         adminService.auditPost(id, pass);
         return R.ok();
     }

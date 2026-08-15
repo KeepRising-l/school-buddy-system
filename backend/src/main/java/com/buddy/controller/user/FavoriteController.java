@@ -2,7 +2,9 @@ package com.buddy.controller.user;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.buddy.common.context.UserContext;
+import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.R;
+import com.buddy.common.result.ResultCode;
 import com.buddy.dto.response.PostVO;
 import com.buddy.service.FavoriteService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,8 +30,7 @@ public class FavoriteController {
     @PostMapping("/add")
     public R<Void> add(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        Long postId = Long.valueOf(body.get("postId").toString());
-        favoriteService.add(userId, postId);
+        favoriteService.add(userId, parsePostId(body));
         return R.ok();
     }
 
@@ -40,9 +41,23 @@ public class FavoriteController {
     @PostMapping("/cancel")
     public R<Void> cancel(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        Long postId = Long.valueOf(body.get("postId").toString());
-        favoriteService.cancel(userId, postId);
+        favoriteService.cancel(userId, parsePostId(body));
         return R.ok();
+    }
+
+    /**
+     * 解析请求体中的 postId（防 NPE 500）
+     */
+    private Long parsePostId(Map<String, Object> body) {
+        Object postIdObj = body == null ? null : body.get("postId");
+        if (postIdObj == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "缺少帖子ID");
+        }
+        try {
+            return Long.valueOf(postIdObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "帖子ID不合法");
+        }
     }
 
     /**

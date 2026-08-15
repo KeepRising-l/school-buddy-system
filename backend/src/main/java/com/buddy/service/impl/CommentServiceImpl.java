@@ -3,10 +3,15 @@ package com.buddy.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.hutool.core.util.StrUtil;
+import com.buddy.common.exception.BusinessException;
+import com.buddy.common.result.ResultCode;
 import com.buddy.dto.response.CommentVO;
+import com.buddy.entity.Post;
 import com.buddy.entity.PostComment;
 import com.buddy.entity.User;
 import com.buddy.mapper.PostCommentMapper;
+import com.buddy.mapper.PostMapper;
 import com.buddy.mapper.UserMapper;
 import com.buddy.service.CommentService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,8 +32,23 @@ public class CommentServiceImpl implements CommentService {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private PostMapper postMapper;
+
     @Override
     public void addComment(Long userId, Long postId, String content) {
+        // 校验评论内容非空且不超长（数据库限制500字符）
+        if (StrUtil.isBlank(content)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "评论内容不能为空");
+        }
+        if (content.length() > 500) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "评论内容不能超过500字");
+        }
+        // 校验帖子存在（防止孤儿评论）
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
         PostComment comment = new PostComment();
         comment.setPostId(postId);
         comment.setUserId(userId);
