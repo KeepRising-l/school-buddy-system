@@ -46,10 +46,16 @@
 
         <!-- 功能列表 -->
         <van-cell-group inset class="func-group">
+          <van-cell title="消息中心" is-link to="/message" icon="bell-o">
+            <template #value>
+              <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
+            </template>
+          </van-cell>
           <van-cell title="个人资料" is-link to="/mine/profile" icon="user-o" />
           <van-cell title="兴趣标签" is-link to="/mine/tags" icon="label-o" />
           <van-cell title="我的发布" is-link to="/mine/posts" icon="notes-o" />
           <van-cell title="我的预约" is-link to="/mine/applies" icon="orders-o" />
+          <van-cell title="我的收藏" is-link to="/mine/favorites" icon="star-o" />
         </van-cell-group>
 
         <!-- 退出登录 -->
@@ -77,16 +83,30 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { showConfirmDialog } from 'vant'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { getUnreadCount } from '@/api/notification'
 import TabbarLayout from '@/components/TabbarLayout.vue'
 import CreditStar from '@/components/CreditStar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+// 未读通知数（V1.1 消息中心角标）
+const unreadCount = ref(0)
+
+const fetchUnreadCount = async () => {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await getUnreadCount()
+    unreadCount.value = res.data?.count || 0
+  } catch (e) {
+    // 静默处理
+  }
+}
 
 const creditBadgeClass = computed(() => {
   const score = userStore.userInfo.creditScore || 100
@@ -105,6 +125,10 @@ const handleLogout = async () => {
     // 用户取消
   }
 }
+
+onMounted(() => {
+  fetchUnreadCount()
+})
 </script>
 
 <style scoped lang="scss">
@@ -236,6 +260,20 @@ const handleLogout = async () => {
       color: var(--danger);
       text-align: center;
     }
+  }
+
+  .unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
   }
 }
 

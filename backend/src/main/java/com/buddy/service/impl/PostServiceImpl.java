@@ -18,12 +18,14 @@ import com.buddy.entity.PostApply;
 import com.buddy.entity.User;
 import com.buddy.entity.UserTag;
 import com.buddy.entity.InterestTag;
+import com.buddy.entity.Notification;
 import com.buddy.mapper.InterestTagMapper;
 import com.buddy.mapper.PostApplyMapper;
 import com.buddy.mapper.PostMapper;
 import com.buddy.mapper.UserMapper;
 import com.buddy.mapper.UserTagMapper;
 import com.buddy.service.CreditService;
+import com.buddy.service.NotificationService;
 import com.buddy.service.PostService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -62,6 +64,9 @@ public class PostServiceImpl implements PostService {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
 
     /** 浏览量去重缓存前缀 */
     private static final String VIEW_COUNT_KEY = "post:view:";
@@ -268,6 +273,19 @@ public class PostServiceImpl implements PostService {
         // 更新状态
         post.setStatus(PostStatus.CANCELLED);
         postMapper.updateById(post);
+
+        // 通知所有已报名用户：组局已取消（V1.1 通知中心）
+        List<PostApply> applies = postApplyMapper.selectList(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED)
+        );
+        for (PostApply apply : applies) {
+            notificationService.send(apply.getApplicantId(), Notification.TYPE_POST_CANCEL,
+                    "组局已取消",
+                    "你参加的组局「" + post.getTitle() + "」已被取消",
+                    "/post/" + postId, postId);
+        }
     }
 
     @Override

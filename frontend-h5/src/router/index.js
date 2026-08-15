@@ -66,6 +66,18 @@ const routes = [
     meta: { title: '我的预约', requireAuth: true }
   },
   {
+    path: '/mine/favorites',
+    name: 'MyFavorites',
+    component: () => import('@/views/mine/MyFavorites.vue'),
+    meta: { title: '我的收藏', requireAuth: true }
+  },
+  {
+    path: '/message',
+    name: 'NotificationList',
+    component: () => import('@/views/message/NotificationList.vue'),
+    meta: { title: '消息中心', requireAuth: true }
+  },
+  {
     path: '/review/:postId',
     name: 'ReviewPage',
     component: () => import('@/views/review/ReviewPage.vue'),

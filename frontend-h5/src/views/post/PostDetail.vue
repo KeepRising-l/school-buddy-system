@@ -104,6 +104,13 @@
 
     <!-- 底部操作区域 -->
     <div class="bottom-action safe-area-bottom" v-if="post">
+      <!-- 收藏按钮（V1.1） -->
+      <div class="fav-btn" @click="handleToggleFavorite">
+        <van-icon :name="favorited ? 'star' : 'star-o'" :color="favorited ? '#f59e0b' : '#9ca3af'" size="22" />
+        <span class="fav-text" :class="{ active: favorited }">{{ favorited ? '已收藏' : '收藏' }}</span>
+        <span v-if="favoriteCount > 0" class="fav-count">{{ favoriteCount }}</span>
+      </div>
+
       <!-- 评论输入 -->
       <van-field
         v-model="commentText"
@@ -235,6 +242,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { getPostDetail, addComment, getComments } from '@/api/post'
 import { applyJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
+import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
 import { useUserStore } from '@/store/user'
 import CreditStar from '@/components/CreditStar.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -251,6 +259,9 @@ const commentText = ref('')
 const applyLoading = ref(false)
 const showApplySheet = ref(false)
 const applyList = ref([])
+// 收藏状态（V1.1）
+const favorited = ref(false)
+const favoriteCount = ref(0)
 
 // 状态映射
 const statusMap = {
@@ -309,6 +320,41 @@ const fetchDetail = async () => {
   try {
     const res = await getPostDetail(postId)
     post.value = res.data
+  } catch (err) {
+    // 接口层已处理
+  }
+}
+
+// 加载收藏状态（V1.1）
+const fetchFavoriteStatus = async () => {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await getFavoriteStatus(postId)
+    favorited.value = res.data?.favorited || false
+    favoriteCount.value = res.data?.count || 0
+  } catch (err) {
+    // 静默处理
+  }
+}
+
+// 切换收藏（V1.1）
+const handleToggleFavorite = async () => {
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: `/post/${postId}` } })
+    return
+  }
+  try {
+    if (favorited.value) {
+      await cancelFavorite(postId)
+      favorited.value = false
+      favoriteCount.value = Math.max(0, favoriteCount.value - 1)
+      showToast('已取消收藏')
+    } else {
+      await addFavorite(postId)
+      favorited.value = true
+      favoriteCount.value += 1
+      showToast('收藏成功')
+    }
   } catch (err) {
     // 接口层已处理
   }
@@ -457,6 +503,7 @@ const goPublisherProfile = () => {
 onMounted(() => {
   fetchDetail()
   fetchComments()
+  fetchFavoriteStatus()
 })
 </script>
 
@@ -647,6 +694,31 @@ onMounted(() => {
   -webkit-backdrop-filter: blur(12px);
   padding: 10px 16px;
   border-top: 1px solid var(--border-light);
+
+  .fav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    border-radius: 999px;
+    background: var(--bg-grey);
+    cursor: pointer;
+
+    .fav-text {
+      font-size: 12px;
+      color: var(--text-hint);
+
+      &.active {
+        color: #f59e0b;
+      }
+    }
+
+    .fav-count {
+      font-size: 11px;
+      color: var(--text-hint);
+    }
+  }
 
   .comment-input {
     margin-bottom: 10px;

@@ -145,6 +145,41 @@ CREATE TABLE `post_comment` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------
+-- 8. 通知表（V1.1 通知中心）
+--    type: APPLY_NEW/APPLY_RESULT/WAITLIST_PROMOTED/
+--          POST_AUDIT/POST_TAKEDOWN/POST_CANCEL/ACTIVITY_REMIND/SYSTEM
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `notification`;
+CREATE TABLE `notification` (
+    `id`           BIGINT        NOT NULL AUTO_INCREMENT,
+    `user_id`      BIGINT        NOT NULL             COMMENT '接收人',
+    `type`         VARCHAR(32)   NOT NULL             COMMENT '通知类型',
+    `title`        VARCHAR(128)  NOT NULL             COMMENT '标题',
+    `content`      VARCHAR(500)  DEFAULT NULL         COMMENT '内容',
+    `link`         VARCHAR(255)  DEFAULT NULL         COMMENT '跳转路径',
+    `is_read`      TINYINT       NOT NULL DEFAULT 0   COMMENT '0未读 1已读',
+    `biz_id`       BIGINT        DEFAULT NULL         COMMENT '关联对象ID（帖子/报名）',
+    `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_read` (`user_id`, `is_read`, `created_time`),
+    KEY `idx_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知表';
+
+-- -----------------------------------------------------
+-- 9. 收藏表（V1.1 组局收藏）
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `favorite`;
+CREATE TABLE `favorite` (
+    `id`           BIGINT        NOT NULL AUTO_INCREMENT,
+    `user_id`      BIGINT        NOT NULL             COMMENT '收藏用户',
+    `post_id`      BIGINT        NOT NULL             COMMENT '帖子',
+    `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_post` (`user_id`, `post_id`),
+    KEY `idx_post` (`post_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏表';
+
+-- -----------------------------------------------------
 -- 初始数据：一个管理员 + 若干兴趣标签 + 测试学生
 -- 密码 123456 的 BCrypt: $2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka
 -- -----------------------------------------------------

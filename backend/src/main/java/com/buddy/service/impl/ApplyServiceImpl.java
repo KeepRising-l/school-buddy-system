@@ -14,12 +14,14 @@ import com.buddy.entity.Post;
 import com.buddy.entity.PostApply;
 import com.buddy.entity.User;
 import com.buddy.entity.UserTag;
+import com.buddy.entity.Notification;
 import com.buddy.mapper.PostApplyMapper;
 import com.buddy.mapper.PostMapper;
 import com.buddy.mapper.UserMapper;
 import com.buddy.mapper.UserTagMapper;
 import com.buddy.service.ApplyService;
 import com.buddy.service.CreditService;
+import com.buddy.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +50,9 @@ public class ApplyServiceImpl implements ApplyService {
 
     @Autowired
     private CreditService creditService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -114,6 +119,12 @@ public class ApplyServiceImpl implements ApplyService {
         apply.setApplyTime(LocalDateTime.now());
 
         postApplyMapper.insert(apply);
+
+        // 通知发布者：有新的报名申请（V1.1 通知中心，与业务同一事务）
+        notificationService.send(post.getPublisherId(), Notification.TYPE_APPLY_NEW,
+                "新的报名申请",
+                applicant.getNickname() + " 报名了你的组局「" + post.getTitle() + "」",
+                "/post/" + postId, postId);
     }
 
     @Override
@@ -218,6 +229,15 @@ public class ApplyServiceImpl implements ApplyService {
             post.setStatus(PostStatus.FULL);
             postMapper.updateById(post);
         }
+
+        // 通知报名者：审核通过（V1.1 通知中心）
+        User applicant = userMapper.selectById(apply.getApplicantId());
+        if (applicant != null) {
+            notificationService.send(apply.getApplicantId(), Notification.TYPE_APPLY_RESULT,
+                    "报名已通过",
+                    "你报名「" + post.getTitle() + "」已通过，记得按时参加！",
+                    "/post/" + post.getId(), post.getId());
+        }
     }
 
     @Override
@@ -243,6 +263,15 @@ public class ApplyServiceImpl implements ApplyService {
         apply.setStatus(ApplyStatus.REJECTED);
         apply.setHandleTime(LocalDateTime.now());
         postApplyMapper.updateById(apply);
+
+        // 通知报名者：审核被拒（V1.1 通知中心）
+        User applicant = userMapper.selectById(apply.getApplicantId());
+        if (applicant != null) {
+            notificationService.send(apply.getApplicantId(), Notification.TYPE_APPLY_RESULT,
+                    "报名未通过",
+                    "很遗憾，你报名「" + post.getTitle() + "」未通过审核",
+                    "/post/" + post.getId(), post.getId());
+        }
     }
 
     @Override
