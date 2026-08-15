@@ -1,6 +1,7 @@
 package com.buddy.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buddy.common.constant.ApplyStatus;
@@ -70,6 +71,11 @@ public class ApplyServiceImpl implements ApplyService {
         }
         if (!PostStatus.RECRUITING.equals(post.getStatus())) {
             throw new BusinessException(ResultCode.POST_NOT_RECRUITING);
+        }
+
+        // V1.2 先审后发闭环：未过审帖子不可报名
+        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
+            throw new BusinessException(ResultCode.POST_NOT_RECRUITING, "帖子未通过审核，暂不可报名");
         }
 
         // 校验不能报名自己发布的帖子
@@ -189,6 +195,11 @@ public class ApplyServiceImpl implements ApplyService {
      * 候补报名内部实现
      */
     private void doWaitlist(Long userId, Post post) {
+        // V1.2 先审后发闭环：未过审帖子不可候补
+        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
+            throw new BusinessException("帖子未通过审核，暂不可候补");
+        }
+
         // 校验不能报名自己发布的帖子
         if (post.getPublisherId().equals(userId)) {
             throw new BusinessException("不能报名自己发布的活动");
@@ -310,10 +321,16 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("活动已开始或已结束，无法取消报名");
         }
 
-        // 更新报名状态
-        apply.setStatus(ApplyStatus.CANCELLED);
-        apply.setHandleTime(LocalDateTime.now());
-        postApplyMapper.updateById(apply);
+        // V1.2 条件更新防并发重复取消：只有仍处于可取消状态的记录才能置 CANCELLED，
+        // 双击/多端同时取消时仅一个请求成功，避免人数被多减、候补被重复递补
+        int updatedCount = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                .eq(PostApply::getId, applyId)
+                .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
+                .set(PostApply::getStatus, ApplyStatus.CANCELLED)
+                .set(PostApply::getHandleTime, LocalDateTime.now()));
+        if (updatedCount == 0) {
+            throw new BusinessException("当前报名状态不可取消");
+        }
 
         // 已通过（APPROVED）的报名取消后：人数-1，若满员则回退为招募中（原子操作）
         if (ApplyStatus.APPROVED.equals(originalStatus)) {
@@ -334,18 +351,15 @@ public class ApplyServiceImpl implements ApplyService {
 
         // 活动开始前1小时内取消报名，扣除信誉分5分（CAN-03，窗口为 [开始前1小时, 开始时间]）
         // 修复：仅 APPROVED（已占名额）取消才扣分；PENDING/WAITLIST 未占名额不扣
+        // V1.2 原子更新，避免并发丢更新
         if (ApplyStatus.APPROVED.equals(originalStatus)
                 && post.getStartTime() != null) {
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime startTime = post.getStartTime();
             if (now.isAfter(startTime.minusHours(1)) && now.isBefore(startTime)) {
-                User applicant = userMapper.selectById(userId);
-                if (applicant != null) {
-                    int newScore = Math.max(CreditConstant.MIN_SCORE,
-                            applicant.getCreditScore() + CreditConstant.CANCEL_LAST_MINUTE);
-                    applicant.setCreditScore(newScore);
-                    userMapper.updateById(applicant);
-                }
+                userMapper.update(null, new LambdaUpdateWrapper<User>()
+                        .eq(User::getId, userId)
+                        .setSql("credit_score = GREATEST(0, credit_score + " + CreditConstant.CANCEL_LAST_MINUTE + ")"));
             }
         }
     }
@@ -369,15 +383,26 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("当前帖子状态不可审批报名");
         }
 
+        // V1.2 先审后发闭环：未过审帖子不可审批
+        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
+            throw new BusinessException("帖子未通过审核，暂不可审批报名");
+        }
+
         // 校验报名状态为PENDING
         if (!ApplyStatus.PENDING.equals(apply.getStatus())) {
             throw new BusinessException("只能审批待审核的报名");
         }
 
-        // 更新报名状态为APPROVED
-        apply.setStatus(ApplyStatus.APPROVED);
-        apply.setHandleTime(LocalDateTime.now());
-        postApplyMapper.updateById(apply);
+        // V1.2 条件更新防并发重复审批：只有仍为 PENDING 的记录才能置 APPROVED，
+        // 并发双击/双端审批时第二个请求更新 0 行直接失败，避免同一申请人被计入两次名额
+        int updatedCount = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                .eq(PostApply::getId, applyId)
+                .eq(PostApply::getStatus, ApplyStatus.PENDING)
+                .set(PostApply::getStatus, ApplyStatus.APPROVED)
+                .set(PostApply::getHandleTime, LocalDateTime.now()));
+        if (updatedCount == 0) {
+            throw new BusinessException("该报名已被处理，请刷新后重试");
+        }
 
         // 原子增加人数（仅当未满员时），防止并发超卖
         int updated = postMapper.incrementCurrentPeople(post.getId());
@@ -417,15 +442,25 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException(ResultCode.FORBIDDEN, "只有发布者才能审批报名");
         }
 
+        // V1.2 先审后发闭环：未过审帖子不可审批
+        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
+            throw new BusinessException("帖子未通过审核，暂不可审批报名");
+        }
+
         // 校验报名状态为PENDING
         if (!ApplyStatus.PENDING.equals(apply.getStatus())) {
             throw new BusinessException("只能拒绝待审核的报名");
         }
 
-        // 更新报名状态为REJECTED
-        apply.setStatus(ApplyStatus.REJECTED);
-        apply.setHandleTime(LocalDateTime.now());
-        postApplyMapper.updateById(apply);
+        // V1.2 条件更新防并发重复拒绝
+        int updatedCount = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                .eq(PostApply::getId, applyId)
+                .eq(PostApply::getStatus, ApplyStatus.PENDING)
+                .set(PostApply::getStatus, ApplyStatus.REJECTED)
+                .set(PostApply::getHandleTime, LocalDateTime.now()));
+        if (updatedCount == 0) {
+            throw new BusinessException("该报名已被处理，请刷新后重试");
+        }
 
         // 通知报名者：审核被拒（V1.1 通知中心）
         User applicant = userMapper.selectById(apply.getApplicantId());
@@ -545,29 +580,45 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("活动进行中或已结束时才能标记出勤");
         }
 
+        // V1.2 出勤标记时间窗：
+        // 1) 活动进行中不允许标记"未到场"（参与者可能仍在路上），只能标记已出勤
+        // 2) 活动结束后 24 小时内必须完成标记，避免发布者事后无限期追溯扣分
+        if (PostStatus.ONGOING.equals(post.getStatus()) && !attended) {
+            throw new BusinessException("活动进行中，暂不能标记未到场，请活动结束后再操作");
+        }
+        if (PostStatus.FINISHED.equals(post.getStatus())) {
+            LocalDateTime markDeadline = post.getEndTime().plusHours(24);
+            if (LocalDateTime.now().isAfter(markDeadline)) {
+                throw new BusinessException("活动结束超过24小时，无法再标记出勤状态");
+            }
+        }
+
         // 校验报名状态为APPROVED
         if (!ApplyStatus.APPROVED.equals(apply.getStatus())) {
             throw new BusinessException("只能标记已通过的报名出勤状态");
         }
 
-        // 更新出勤状态
-        apply.setStatus(attended ? ApplyStatus.ATTENDED : ApplyStatus.NOSHOW);
-        apply.setHandleTime(LocalDateTime.now());
-        postApplyMapper.updateById(apply);
+        // 更新出勤状态（条件更新防并发重复标记）
+        int updatedCount = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                .eq(PostApply::getId, applyId)
+                .eq(PostApply::getStatus, ApplyStatus.APPROVED)
+                .set(PostApply::getStatus, attended ? ApplyStatus.ATTENDED : ApplyStatus.NOSHOW)
+                .set(PostApply::getHandleTime, LocalDateTime.now()));
+        if (updatedCount == 0) {
+            throw new BusinessException("该报名状态已变更，请刷新后重试");
+        }
 
-        // 未到场扣信誉分10分
+        // 未到场扣信誉分10分（V1.2 原子更新，避免并发丢更新）
         if (!attended) {
-            User applicant = userMapper.selectById(apply.getApplicantId());
-            if (applicant != null) {
-                int newScore = Math.max(CreditConstant.MIN_SCORE,
-                        applicant.getCreditScore() + CreditConstant.NOSHOW_PENALTY);
-                applicant.setCreditScore(newScore);
-                userMapper.updateById(applicant);
-
+            int updated = userMapper.update(null, new LambdaUpdateWrapper<User>()
+                    .eq(User::getId, apply.getApplicantId())
+                    .setSql("credit_score = GREATEST(0, credit_score + " + CreditConstant.NOSHOW_PENALTY + ")"));
+            if (updated > 0) {
+                User applicant = userMapper.selectById(apply.getApplicantId());
                 // V1.2 通知被扣分用户：信誉分变化必须可感知，避免用户莫名掉分
-                notificationService.send(applicant.getId(), Notification.TYPE_SYSTEM,
+                notificationService.send(apply.getApplicantId(), Notification.TYPE_SYSTEM,
                         "信誉分扣减通知",
-                        "你在组局「" + post.getTitle() + "」中被标记为未到场，信誉分 -10（当前 " + newScore + " 分）",
+                        "你在组局「" + post.getTitle() + "」中被标记为未到场，信誉分 -10（当前 " + applicant.getCreditScore() + " 分）",
                         "/post/" + post.getId(), post.getId());
             }
         }

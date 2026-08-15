@@ -24,7 +24,8 @@ public class ReviewRequest {
     @Max(5)
     private Integer rating;
 
-    /** 标签：靠谱/爽约/迟到 */
+    /** 标签：靠谱/爽约/迟到（V1.2 限长，防止超列宽入库 500） */
+    @Size(max = 64)
     private String tag;
 
     @Size(max = 500)

@@ -7,6 +7,23 @@ const request = axios.create({
   timeout: 15000
 })
 
+// 全局 loading 计数（V1.2 修复）：
+// 并发请求时只显示一个 loading，全部完成后才关闭，避免一个请求返回就提前关掉另一个的 loading。
+// 不使用 forbidClick：分页加载/静默刷新时不应全屏锁住用户操作。
+let loadingCount = 0
+const showGlobalLoading = () => {
+  loadingCount += 1
+  if (loadingCount === 1) {
+    showLoadingToast({ message: '加载中...', duration: 0 })
+  }
+}
+const closeGlobalLoading = () => {
+  loadingCount = Math.max(0, loadingCount - 1)
+  if (loadingCount === 0) {
+    closeToast()
+  }
+}
+
 // 请求拦截器
 request.interceptors.request.use(
   config => {
@@ -16,7 +33,7 @@ request.interceptors.request.use(
     }
     // 非静默请求显示 loading
     if (!config.silent) {
-      showLoadingToast({ message: '加载中...', forbidClick: true, duration: 0 })
+      showGlobalLoading()
     }
     return config
   },
@@ -26,7 +43,7 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   response => {
-    closeToast()
+    closeGlobalLoading()
     const res = response.data
     if (!res) {
       showToast('服务器响应异常')
@@ -54,7 +71,7 @@ request.interceptors.response.use(
     return Promise.reject(new Error(res.message || '操作失败'))
   },
   error => {
-    closeToast()
+    closeGlobalLoading()
     // HTTP 层面的 401（网关/过滤器返回）同样清理并跳转
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('h5_token')

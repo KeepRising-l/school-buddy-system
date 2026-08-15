@@ -19,7 +19,8 @@ export const useUserStore = defineStore('user', () => {
 
   const isLoggedIn = computed(() => !!token.value)
   const creditLevel = computed(() => {
-    const score = userInfo.value.creditScore || 100
+    // 修复：用 ?? 而不是 ||，0 分（失信用户）不能被兜底成 100
+    const score = userInfo.value.creditScore ?? 100
     if (score >= 90) return 5
     if (score >= 75) return 4
     if (score >= 60) return 3
@@ -27,7 +28,7 @@ export const useUserStore = defineStore('user', () => {
     return 1
   })
   const creditLabel = computed(() => {
-    const score = userInfo.value.creditScore || 100
+    const score = userInfo.value.creditScore ?? 100
     if (score >= 90) return '靠谱队友'
     if (score >= 75) return '优质队友'
     if (score >= 60) return '普通队友'

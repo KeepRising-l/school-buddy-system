@@ -166,8 +166,22 @@ public class AdminServiceImpl implements AdminService {
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+        // V1.2 安全防护：禁止封禁管理员账号，防止后台被锁死
+        if (user.getIsAdmin() != null && user.getIsAdmin() == 1) {
+            throw new BusinessException("不能封禁管理员账号");
+        }
         user.setStatus(0);
         userMapper.updateById(user);
+
+        // V1.2 联动：封禁用户其名下未完结帖子一律下架（违规内容不随封禁继续展示）
+        List<Post> activePosts = postMapper.selectList(
+                new LambdaQueryWrapper<Post>()
+                        .eq(Post::getPublisherId, userId)
+                        .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL, PostStatus.ONGOING)
+        );
+        for (Post post : activePosts) {
+            takedownPost(post.getId());
+        }
     }
 
     @Override
@@ -235,6 +249,10 @@ public class AdminServiceImpl implements AdminService {
                         .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
         );
         for (PostApply apply : applies) {
+            // V1.2 恢复名额：已通过（APPROVED）的报名取消后 current_people -1，保持口径一致
+            if (ApplyStatus.APPROVED.equals(apply.getStatus())) {
+                postMapper.decrementCurrentPeople(postId);
+            }
             apply.setStatus(ApplyStatus.CANCELLED);
             apply.setHandleTime(LocalDateTime.now());
             postApplyMapper.updateById(apply);

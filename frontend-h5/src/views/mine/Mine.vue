@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <TabbarLayout>
     <div class="mine-page page-with-tabbar">
       <!-- 已登录状态 -->
@@ -15,10 +15,10 @@
             <div class="user-info">
               <div class="name-row">
                 <span class="nickname">{{ userStore.userInfo.nickname || userStore.userInfo.name || '用户' }}</span>
-                <CreditStar :score="userStore.userInfo.creditScore || 100" size="small" />
+                <CreditStar :score="userStore.userInfo.creditScore ?? 100" size="small" />
               </div>
               <div class="credit-row">
-                <span class="credit-score">信誉分 {{ userStore.userInfo.creditScore || 100 }}</span>
+                <span class="credit-score">信誉分 {{ userStore.userInfo.creditScore ?? 100 }}</span>
                 <span class="credit-badge" :class="creditBadgeClass">{{ userStore.creditLabel }}</span>
               </div>
               <div class="college" v-if="userStore.userInfo.college">{{ userStore.userInfo.college }}</div>
@@ -38,7 +38,7 @@
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
-              <span class="stat-num">{{ userStore.userInfo.creditScore || 100 }}</span>
+              <span class="stat-num">{{ userStore.userInfo.creditScore ?? 100 }}</span>
               <span class="stat-label">信誉</span>
             </div>
           </div>
@@ -111,7 +111,7 @@ const fetchUnreadCount = async () => {
 }
 
 const creditBadgeClass = computed(() => {
-  const score = userStore.userInfo.creditScore || 100
+  const score = userStore.userInfo.creditScore ?? 100
   if (score >= 90) return 'badge-excellent'
   if (score >= 75) return 'badge-good'
   if (score >= 60) return 'badge-normal'

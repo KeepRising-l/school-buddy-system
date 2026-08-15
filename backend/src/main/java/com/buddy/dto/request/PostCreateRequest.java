@@ -17,6 +17,7 @@ public class PostCreateRequest {
     private String title;
 
     @NotBlank
+    @Size(max = 64)
     private String category;
 
     /** 逗号分隔的标签ID */
@@ -31,6 +32,7 @@ public class PostCreateRequest {
     private LocalDateTime endTime;
 
     @NotBlank
+    @Size(max = 128)
     private String location;
 
     @NotNull

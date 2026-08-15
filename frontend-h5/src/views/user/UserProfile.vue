@@ -11,7 +11,7 @@
           <div class="user-info">
             <div class="name-row">
               <span class="nickname">{{ profile.nickname || '用户' }}</span>
-              <CreditStar :score="profile.creditScore || 100" size="small" />
+              <CreditStar :score="profile.creditScore ?? 100" size="small" />
             </div>
             <div class="credit-row">
               <span class="credit-score">信誉分 {{ profile.creditScore ?? 100 }}</span>
@@ -87,6 +87,13 @@
       </div>
     </div>
 
+    <!-- 加载失败态（V1.2：与 PostDetail 一致，不再无限转圈） -->
+    <div class="loading-area" v-else-if="loadError">
+      <van-empty description="加载失败，请检查网络后重试">
+        <van-button type="primary" round size="small" @click="reload">重新加载</van-button>
+      </van-empty>
+    </div>
+
     <!-- 加载中 -->
     <div class="loading-area" v-else>
       <van-loading size="24px">加载中...</van-loading>
@@ -141,13 +148,23 @@ const tagClass = (tag) => {
   return 'tag-neutral'
 }
 
+// 加载失败态（V1.2）
+const loadError = ref(false)
+
 const fetchProfile = async () => {
+  loadError.value = false
   try {
     const res = await getUserProfile(userId)
     profile.value = res.data
   } catch (err) {
-    // 接口层已处理
+    // 修复：失败显示错误态+重试，而不是永远"加载中"
+    loadError.value = true
   }
+}
+
+const reload = () => {
+  profile.value = null
+  fetchProfile()
 }
 
 const formatTime = (time) => {

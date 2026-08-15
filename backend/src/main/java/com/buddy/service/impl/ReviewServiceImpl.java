@@ -20,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -99,11 +98,11 @@ public class ReviewServiceImpl implements ReviewService {
 
         // 校验7天评价窗口（从活动结束时间 endTime 算起，REV-04）
         // 注意：不能用 updatedTime，帖子被编辑会重置窗口，且可能为 null 导致校验被跳过
+        // V1.2 修复：用精确时间比较（原来 ChronoUnit.DAYS 按整天截断，窗口实际多出近1天）
         if (post.getEndTime() != null) {
-            long daysSinceFinished = ChronoUnit.DAYS.between(post.getEndTime(), LocalDateTime.now());
-            if (daysSinceFinished > REVIEW_WINDOW_DAYS) {
+            LocalDateTime deadline = post.getEndTime().plusDays(REVIEW_WINDOW_DAYS);
+            if (LocalDateTime.now().isAfter(deadline)) {
                 // V1.2 报错带上具体截止时间，用户才知道窗口何时关闭
-                LocalDateTime deadline = post.getEndTime().plusDays(REVIEW_WINDOW_DAYS);
                 throw new BusinessException(ResultCode.REVIEW_WINDOW_EXPIRED,
                         "评价窗口已关闭：活动结束后" + REVIEW_WINDOW_DAYS + "天内可评价（截止 " +
                                 deadline.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "）");

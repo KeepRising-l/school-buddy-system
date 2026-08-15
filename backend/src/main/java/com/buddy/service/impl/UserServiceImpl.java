@@ -43,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -311,6 +312,23 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void setUserTags(Long userId, List<Long> tagIds, List<Integer> levels) {
+        // V1.2 防御校验：重复 tagId 会导致唯一键冲突；不存在的 tagId 产生孤儿数据
+        Set<Long> dedup = new LinkedHashSet<>(tagIds);
+        if (dedup.size() != tagIds.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "标签不能重复");
+        }
+        if (levels == null || levels.size() != tagIds.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "标签与段位数量不一致");
+        }
+        List<InterestTag> validTags = interestTagMapper.selectList(
+                new LambdaQueryWrapper<InterestTag>()
+                        .in(InterestTag::getId, tagIds)
+                        .eq(InterestTag::getStatus, 1)
+        );
+        if (validTags.size() != tagIds.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "包含无效的标签");
+        }
+
         // 先删除旧的关联
         userTagMapper.delete(
                 new LambdaQueryWrapper<UserTag>().eq(UserTag::getUserId, userId)

@@ -87,8 +87,9 @@ public class UserController {
             }
             tagIds.add(((Number) tid).longValue());
             int level = ((Number) lv).intValue();
-            if (level < 1 || level > 5) {
-                throw new BusinessException(ResultCode.BAD_REQUEST, "段位必须在1-5之间");
+            // V1.2 允许 0：无段位体系的项目（晨跑/剧本杀等）段位为 0
+            if (level < 0 || level > 5) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "段位必须在0-5之间");
             }
             levels.add(level);
         }
@@ -135,7 +136,17 @@ public class UserController {
     @PutMapping("/privacy")
     public R<Void> setProfilePrivacy(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
-        Integer privacy = Integer.valueOf(body.get("privacy").toString());
+        // V1.2 防御解析：缺失/非数字参数直接 400，避免 NPE 500
+        Object privacyObj = body == null ? null : body.get("privacy");
+        if (privacyObj == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "缺少隐私设置参数");
+        }
+        Integer privacy;
+        try {
+            privacy = Integer.valueOf(privacyObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "隐私设置参数不合法");
+        }
         userService.setProfilePrivacy(userId, privacy);
         return R.ok();
     }

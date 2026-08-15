@@ -232,14 +232,20 @@ const onTabChange = () => {
   // 数据已在各自列表中维护，切换时无需重新加载
 }
 
-// 同意申请
+// 同意申请（V1.2 加二次确认，与 PostDetail/MyPosts 行为统一）
 const handleApprove = async (id) => {
   try {
+    await showConfirmDialog({
+      title: '通过申请',
+      message: '确定通过该申请？通过后对方将占用一个名额。',
+      confirmButtonText: '通过',
+      cancelButtonText: '再想想'
+    })
     await approveApply(id)
     showToast('已同意')
     onReceivedRefresh()
   } catch (err) {
-    // 接口层已处理
+    // 用户取消或接口错误
   }
 }
 

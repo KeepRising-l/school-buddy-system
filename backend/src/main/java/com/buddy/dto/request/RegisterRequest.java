@@ -4,6 +4,7 @@ import lombok.Data;
 
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
 
 /**
  * 注册请求
@@ -27,5 +28,6 @@ public class RegisterRequest {
     private String password;
 
     @NotBlank(message = "姓名不能为空")
+    @Size(max = 64, message = "姓名最长64字符")
     private String realName;
 }

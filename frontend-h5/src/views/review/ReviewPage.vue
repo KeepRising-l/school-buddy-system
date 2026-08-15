@@ -4,10 +4,10 @@
     <van-nav-bar title="评价搭子" left-arrow @click-left="router.back()" />
 
     <div class="content">
-      <!-- 评价窗口提示（V1.2）：活动结束后7天内可评价，避免用户过时才想起来 -->
+      <!-- 评价窗口提示（V1.2）：活动结束后7天内可评价，动态显示剩余天数 -->
       <div class="window-tip">
         <van-icon name="info-o" />
-        <span>活动结束后 7 天内可评价，逾期将无法提交</span>
+        <span>{{ windowText }}</span>
       </div>
 
       <!-- 被评价人信息 -->
@@ -132,12 +132,23 @@ const toggleTag = (tag) => {
 }
 
 // 加载帖子信息，根据当前用户身份确定被评价人（V1.1 修复：发布者只能评价已出勤的参与者）
+const windowText = ref('活动结束后 7 天内可评价，逾期将无法提交')
 const fetchPostInfo = async () => {
   try {
     const res = await getPostDetail(postId)
     const post = res.data
     const myId = userStore.userInfo?.id
     if (!post || !myId) return
+
+    // V1.2 动态计算 7 天窗口剩余天数
+    if (post.endTime) {
+      const end = new Date(post.endTime)
+      const deadline = new Date(end.getTime() + 7 * 24 * 60 * 60 * 1000)
+      const daysLeft = Math.ceil((deadline - Date.now()) / (24 * 60 * 60 * 1000))
+      windowText.value = daysLeft > 0
+        ? `活动结束后 7 天内可评价，还剩约 ${daysLeft} 天`
+        : '评价窗口已关闭，逾期无法提交'
+    }
 
     if (String(post.publisherId) === String(myId)) {
       // 当前用户是发布者 → 从可评价列表（已出勤参与者）中选择
@@ -170,10 +181,15 @@ const selectTarget = (user) => {
   targetUser.value = { id: user.userId, nickname: user.nickname, avatar: user.avatar }
 }
 
-// 提交评价
+// 提交评价（V1.2：校验评价对象已选定 + 防重复提交）
 const handleSubmit = async () => {
+  if (submitting.value) return
   if (form.score === 0) {
     showToast('请选择评分')
+    return
+  }
+  if (!targetUser.value.id) {
+    showToast('暂无评价对象，无法提交')
     return
   }
 

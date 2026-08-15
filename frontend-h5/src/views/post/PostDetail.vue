@@ -146,13 +146,13 @@
         <!-- 自己发布的帖子 -->
         <template v-if="isOwner">
           <van-button
-            v-if="post.status === 'RECRUITING' || post.status === 'FULL' || post.status === 'ONGOING'"
+            v-if="post.status === 'RECRUITING' || post.status === 'FULL' || post.status === 'ONGOING' || post.status === 'FINISHED'"
             type="primary"
             round
             block
             @click="openApplySheet"
           >
-            管理报名
+            {{ post.status === 'FINISHED' ? '管理报名/标记出勤' : '管理报名' }}
           </van-button>
           <van-button
             v-if="post.status === 'FINISHED'"
@@ -687,6 +687,7 @@ const applyStatusText = (status) => {
     APPROVED: '已通过',
     REJECTED: '已拒绝',
     CANCELLED: '已取消',
+    WAITLIST: '候补中',
     ATTENDED: '已出勤',
     NOSHOW: '未到场'
   }
@@ -700,33 +701,46 @@ const applyStatusType = (status) => {
     APPROVED: 'success',
     REJECTED: 'danger',
     CANCELLED: 'default',
+    WAITLIST: 'warning',
     ATTENDED: 'success',
     NOSHOW: 'danger'
   }
   return map[status] || 'default'
 }
 
-// 通过报名
+// 通过报名（V1.2 加二次确认，避免误触影响他人参与资格）
 const handleApprove = async (applyId) => {
   try {
+    await showConfirmDialog({
+      title: '通过申请',
+      message: '确定通过该申请？通过后对方将占用一个名额。',
+      confirmButtonText: '通过',
+      cancelButtonText: '再想想'
+    })
     await approveApply(applyId)
     showToast('已通过')
     await openApplySheet()
     await fetchDetail()
   } catch (err) {
-    // 接口层已处理
+    // 用户取消或接口错误
   }
 }
 
-// 拒绝报名
+// 拒绝报名（V1.2 加二次确认，拒绝不可撤销）
 const handleReject = async (applyId) => {
   try {
+    await showConfirmDialog({
+      title: '拒绝申请',
+      message: '确定拒绝该申请？拒绝后对方将收到通知，且不可撤销。',
+      confirmButtonText: '拒绝',
+      cancelButtonText: '再想想'
+    })
     await rejectApply(applyId)
     showToast('已拒绝')
     await openApplySheet()
     await fetchDetail()
   } catch (err) {
-    // 接口层已处理
+    // 用户取消或接口错误
   }
 }
 

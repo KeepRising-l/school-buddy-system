@@ -14,6 +14,7 @@ import com.buddy.entity.User;
 import com.buddy.mapper.PostMapper;
 import com.buddy.mapper.ReportMapper;
 import com.buddy.mapper.UserMapper;
+import com.buddy.service.AdminService;
 import com.buddy.service.NotificationService;
 import com.buddy.service.ReportService;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,9 @@ public class ReportServiceImpl implements ReportService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private AdminService adminService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -155,12 +159,12 @@ public class ReportServiceImpl implements ReportService {
         if (valid) {
             String targetDesc;
             if (Report.TARGET_POST.equals(report.getTargetType())) {
-                // 下架帖子
+                // 下架帖子（V1.2 复用 takedownPost：级联取消未完结报名+恢复人数+通知报名用户，
+                // 修复：原来只置状态导致参与者报名记录悬挂卡死）
                 Post post = postMapper.selectById(report.getTargetId());
                 if (post != null && !PostStatus.CANCELLED.equals(post.getStatus())) {
-                    post.setStatus(PostStatus.CANCELLED);
-                    postMapper.updateById(post);
-                    // 通知发布者：帖子被下架
+                    adminService.takedownPost(report.getTargetId());
+                    // 通知发布者：帖子因违规被下架
                     notificationService.send(post.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
                             "帖子已被下架",
                             "你的组局「" + post.getTitle() + "」因违规被下架，如有疑问请联系管理员",

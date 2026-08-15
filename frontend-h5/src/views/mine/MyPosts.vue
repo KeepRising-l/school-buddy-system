@@ -78,7 +78,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showToast, showConfirmDialog } from 'vant'
 import { getMyPosts } from '@/api/user'
 import { getApplyList, approveApply, rejectApply } from '@/api/apply'
 import EmptyState from '@/components/EmptyState.vue'
@@ -120,8 +120,10 @@ const formatTime = (time) => {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// 加载更多
+// 加载更多（V1.2 加请求序号：tab 快速切换时丢弃过期响应，防止串数据）
+let requestId = 0
 const loadMore = async () => {
+  const currentRequestId = ++requestId
   try {
     const params = {
       page: page.value,
@@ -131,6 +133,7 @@ const loadMore = async () => {
       params.status = activeTab.value
     }
     const res = await getMyPosts(params)
+    if (currentRequestId !== requestId) return
     const list = res.data?.records || res.data || []
     if (page.value === 1) {
       postList.value = list
@@ -184,40 +187,52 @@ const goManageApply = async (postId) => {
   }
 }
 
-// 报名状态文本
+// 报名状态文本（V1.2 补 WAITLIST 映射）
 const applyStatusText = (status) => {
-  const map = { PENDING: '待审核', APPROVED: '已通过', REJECTED: '已拒绝', CANCELLED: '已取消', ATTENDED: '已出勤', NOSHOW: '未到场' }
+  const map = { PENDING: '待审核', APPROVED: '已通过', REJECTED: '已拒绝', CANCELLED: '已取消', WAITLIST: '候补中', ATTENDED: '已出勤', NOSHOW: '未到场' }
   return map[status] || status
 }
 
 // 报名状态标签类型
 const applyStatusType = (status) => {
-  const map = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger', CANCELLED: 'default', ATTENDED: 'success', NOSHOW: 'danger' }
+  const map = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger', CANCELLED: 'default', WAITLIST: 'warning', ATTENDED: 'success', NOSHOW: 'danger' }
   return map[status] || 'default'
 }
 
-// 通过报名
+// 通过报名（V1.2 加二次确认）
 const handleApprove = async (applyId) => {
   try {
+    await showConfirmDialog({
+      title: '通过申请',
+      message: '确定通过该申请？通过后对方将占用一个名额。',
+      confirmButtonText: '通过',
+      cancelButtonText: '再想想'
+    })
     await approveApply(applyId)
     showToast('已通过')
     // 刷新报名列表和帖子列表
     await goManageApply(currentPostId.value)
     onRefresh()
   } catch (err) {
-    // 接口层已处理
+    // 用户取消或接口错误
   }
 }
 
-// 拒绝报名
+// 拒绝报名（V1.2 加二次确认，拒绝不可撤销）
 const handleReject = async (applyId) => {
   try {
+    await showConfirmDialog({
+      title: '拒绝申请',
+      message: '确定拒绝该申请？拒绝后对方将收到通知，且不可撤销。',
+      confirmButtonText: '拒绝',
+      cancelButtonText: '再想想'
+    })
     await rejectApply(applyId)
     showToast('已拒绝')
     await goManageApply(currentPostId.value)
     onRefresh()
   } catch (err) {
-    // 接口层已处理
+    // 用户取消或接口错误
   }
 }
 </script>

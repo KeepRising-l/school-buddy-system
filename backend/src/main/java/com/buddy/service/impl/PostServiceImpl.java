@@ -152,6 +152,15 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
         }
 
+        // V1.2 先审后发闭环：未过审（待审核/被拒）的帖子仅发布者可查看，他人视为不存在，
+        // 防止按 ID 遍历泄露未过审帖内容与报名者名单
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() != 1) {
+            boolean isOwner = userId != null && post.getPublisherId().equals(userId);
+            if (!isOwner) {
+                throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在或未通过审核");
+            }
+        }
+
         // 查询发布者信息
         User publisher = userMapper.selectById(post.getPublisherId());
 
@@ -324,6 +333,10 @@ public class PostServiceImpl implements PostService {
                         .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
         );
         for (PostApply apply : applies) {
+            // V1.2 恢复名额：已通过（APPROVED）的报名取消后 current_people -1，保持口径一致
+            if (ApplyStatus.APPROVED.equals(apply.getStatus())) {
+                postMapper.decrementCurrentPeople(postId);
+            }
             apply.setStatus(ApplyStatus.CANCELLED);
             apply.setHandleTime(LocalDateTime.now());
             postApplyMapper.updateById(apply);

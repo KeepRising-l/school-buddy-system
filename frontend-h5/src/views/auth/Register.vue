@@ -166,6 +166,8 @@ const validate = () => {
 }
 
 const handleRegister = async () => {
+  // V1.2 防重复提交：快速连点只发一次请求
+  if (loading.value) return
   if (!validate()) return
 
   loading.value = true

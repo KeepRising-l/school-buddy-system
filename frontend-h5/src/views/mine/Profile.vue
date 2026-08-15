@@ -140,8 +140,10 @@ const onAvatarRead = async (file) => {
   }
 }
 
-// 加载个人资料
+// 加载个人资料（V1.2：加载失败标记 loadFailed，禁止空表单覆盖服务器数据）
+const loadFailed = ref(false)
 const fetchProfile = async () => {
+  loadFailed.value = false
   try {
     const res = await getProfile()
     const data = res.data
@@ -151,12 +153,18 @@ const fetchProfile = async () => {
     form.college = data.college || ''
     form.gender = data.gender != null ? data.gender : 0
   } catch (err) {
-    // 接口层已处理
+    // 修复：失败标记状态，保存时阻止空值覆盖
+    loadFailed.value = true
   }
 }
 
-// 保存个人资料
+// 保存个人资料（V1.2：加载失败禁止保存 + 防重复提交）
 const handleSave = async () => {
+  if (saving.value) return
+  if (loadFailed.value) {
+    showToast('资料加载失败，请下拉重试后再保存')
+    return
+  }
   if (!form.nickname) {
     showToast('请输入昵称')
     return
