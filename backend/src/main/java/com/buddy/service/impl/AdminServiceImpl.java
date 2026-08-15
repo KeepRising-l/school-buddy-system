@@ -11,9 +11,11 @@ import com.buddy.common.result.ResultCode;
 import com.buddy.dto.response.PostVO;
 import com.buddy.dto.response.UserVO;
 import com.buddy.entity.*;
+import com.buddy.entity.Notification;
 import com.buddy.mapper.*;
 import com.buddy.service.AdminService;
 import com.buddy.service.CreditService;
+import com.buddy.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Autowired
     private CreditService creditService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Override
     public IPage<UserVO> getUserList(int page, int size, String keyword) {
@@ -227,8 +232,16 @@ public class AdminServiceImpl implements AdminService {
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
         }
-        post.setIsAuditPass(pass ? 1 : 0);
+        // V1.1 先审后发三态：通过=1 / 拒绝=2
+        post.setIsAuditPass(pass ? 1 : 2);
         postMapper.updateById(post);
+
+        // V1.1 通知发布者审核结果
+        notificationService.send(post.getPublisherId(), Notification.TYPE_POST_AUDIT,
+                pass ? "帖子审核通过" : "帖子审核未通过",
+                pass ? "你的组局「" + post.getTitle() + "」已审核通过，现在可在广场看到"
+                        : "你的组局「" + post.getTitle() + "」未通过审核，请修改后重新发布",
+                "/post/" + postId, postId);
     }
 
     @Override

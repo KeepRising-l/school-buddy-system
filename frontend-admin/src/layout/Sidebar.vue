@@ -29,6 +29,10 @@
         <el-icon><PriceTag /></el-icon>
         <template #title>标签管理</template>
       </el-menu-item>
+      <el-menu-item index="/report">
+        <el-icon><Warning /></el-icon>
+        <template #title>举报中心</template>
+      </el-menu-item>
       <el-menu-item index="/stats">
         <el-icon><TrendCharts /></el-icon>
         <template #title>数据统计</template>

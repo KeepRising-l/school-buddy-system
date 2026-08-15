@@ -116,8 +116,8 @@ public class PostServiceImpl implements PostService {
         post.setStatus(PostStatus.RECRUITING);
         post.setViewCount(0);
         post.setLikeCount(0);
-        // 默认审核通过（与 schema.sql DEFAULT 1 一致；如需先审后发可在此改为 0 并加审核列表）
-        post.setIsAuditPass(1);
+        // V1.1 先审后发：发布后默认待审核（0），审核通过后才在广场展示
+        post.setIsAuditPass(0);
 
         postMapper.insert(post);
         return post.getId();

@@ -1,7 +1,11 @@
 <template>
   <div class="page post-detail-page">
     <!-- 顶部导航栏 -->
-    <van-nav-bar title="组局详情" left-arrow @click-left="router.back()" />
+    <van-nav-bar title="组局详情" left-arrow @click-left="router.back()">
+      <template #right>
+        <van-icon name="warning-o" size="20" color="#9ca3af" class="report-icon" @click="handleReport" />
+      </template>
+    </van-nav-bar>
 
     <div class="content" v-if="post">
       <!-- 标题 + 状态标签 -->
@@ -247,10 +251,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast, showConfirmDialog } from 'vant'
+import { showToast, showConfirmDialog, showActionSheet, showDialog } from 'vant'
 import { getPostDetail, addComment, getComments } from '@/api/post'
 import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
+import { submitReport } from '@/api/report'
 import { useUserStore } from '@/store/user'
 import CreditStar from '@/components/CreditStar.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -317,6 +322,44 @@ const applyStatus = computed(() => {
 })
 
 // 格式化时间
+// 举报帖子（V1.1）
+const handleReport = async () => {
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: `/post/${postId}` } })
+    return
+  }
+  try {
+    const action = await showActionSheet({
+      title: '举报该组局',
+      actions: [
+        { name: '违规内容（广告/色情/违法）' },
+        { name: '虚假信息（信息与实际不符）' },
+        { name: '恶意行为（恶意报名/骚扰）' },
+        { name: '其他问题' }
+      ],
+      cancelText: '取消'
+    })
+    if (!action) return
+    await showDialog({
+      title: '确认举报',
+      message: `举报类型：${action.name}。请确认举报内容真实有效，恶意举报将影响你的信誉。`,
+      showCancelButton: true,
+      confirmButtonText: '提交举报',
+      cancelButtonText: '再想想'
+    }).then(async () => {
+      await submitReport({
+        targetType: 'POST',
+        targetId: Number(postId),
+        reasonType: action.name.replace(/（.*）/, ''),
+        description: action.name
+      })
+      showToast('举报已提交，等待处理')
+    })
+  } catch (e) {
+    // 用户取消或接口错误（拦截器已提示）
+  }
+}
+
 const formatTime = (time) => {
   if (!time) return ''
   const d = new Date(time)

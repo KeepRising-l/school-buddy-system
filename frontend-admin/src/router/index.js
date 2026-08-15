@@ -37,6 +37,12 @@ const routes = [
         meta: { title: '标签管理', icon: 'PriceTag' }
       },
       {
+        path: 'report',
+        name: 'ReportList',
+        component: () => import('@/views/report/ReportList.vue'),
+        meta: { title: '举报中心', icon: 'Warning' }
+      },
+      {
         path: 'stats',
         name: 'StatsView',
         component: () => import('@/views/stats/StatsView.vue'),

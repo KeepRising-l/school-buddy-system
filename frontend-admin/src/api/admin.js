@@ -34,3 +34,8 @@ export const getActiveTrend = (params) => request.get('/api/admin/stats/active',
 export const getCategoryTop5 = () => request.get('/api/admin/stats/category')
 export const getCreditDistribution = () => request.get('/api/admin/stats/credit')
 export const getUserGrowthTrend = (params) => request.get('/api/admin/stats/user-growth', { params })
+
+// ===== 举报处理（V1.1）=====
+export const getReportList = (params) => request.get('/api/admin/report/list', { params })
+export const getReportDetail = (id) => request.get(`/api/admin/report/detail/${id}`)
+export const handleReport = (id, data) => request.post(`/api/admin/report/handle/${id}`, data)

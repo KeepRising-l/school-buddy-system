@@ -85,7 +85,7 @@ CREATE TABLE `post` (
     `status`         VARCHAR(24)   NOT NULL DEFAULT 'RECRUITING',
     `view_count`     INT           DEFAULT 0,
     `like_count`     INT           DEFAULT 0,
-    `is_audit_pass`  TINYINT       DEFAULT 1             COMMENT '管理员是否已审核通过 1通过 0待审',
+    `is_audit_pass`  TINYINT       DEFAULT 0             COMMENT '审核状态 0待审核 1已通过 2已拒绝（先审后发）',
     `created_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `updated_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -178,6 +178,29 @@ CREATE TABLE `favorite` (
     UNIQUE KEY `uk_user_post` (`user_id`, `post_id`),
     KEY `idx_post` (`post_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏表';
+
+-- -----------------------------------------------------
+-- 10. 举报表（V1.1 举报闭环）
+--    status: 0待处理 1有效 2无效
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `report`;
+CREATE TABLE `report` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT,
+    `reporter_id`   BIGINT        NOT NULL             COMMENT '举报人',
+    `target_type`   VARCHAR(16)   NOT NULL             COMMENT 'POST/USER',
+    `target_id`     BIGINT        NOT NULL             COMMENT '被举报对象ID',
+    `reason_type`   VARCHAR(32)   NOT NULL             COMMENT '举报类型',
+    `description`   VARCHAR(500)  DEFAULT NULL         COMMENT '举报说明',
+    `status`        TINYINT       NOT NULL DEFAULT 0   COMMENT '0待处理 1有效 2无效',
+    `handle_by`     BIGINT        DEFAULT NULL         COMMENT '处理人',
+    `handle_time`   DATETIME      DEFAULT NULL         COMMENT '处理时间',
+    `handle_remark` VARCHAR(255)  DEFAULT NULL         COMMENT '处理备注',
+    `created_time`  DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_target` (`target_type`, `target_id`),
+    KEY `idx_reporter` (`reporter_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='举报表';
 
 -- -----------------------------------------------------
 -- 初始数据：一个管理员 + 若干兴趣标签 + 测试学生
