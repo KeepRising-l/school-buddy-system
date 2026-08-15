@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -97,15 +98,26 @@ public class ApplyServiceImpl implements ApplyService {
         }
 
         // 校验段位要求（requireLevel为0表示不限）
+        // 修复：不再只检查第一个标签，而是检查用户在帖子任一标签上的最高段位；
+        // 提示语说明具体原因（未设置标签 / 段位不足）
         if (post.getRequireLevel() != null && post.getRequireLevel() > 0) {
-            UserTag userTag = userTagMapper.selectOne(
-                    new LambdaQueryWrapper<UserTag>()
-                            .eq(UserTag::getUserId, userId)
-                            .eq(UserTag::getTagId, parseFirstTagId(post.getTagIds()))
-                            .last("LIMIT 1")
-            );
-            if (userTag == null || userTag.getSelfLevel() < post.getRequireLevel()) {
-                throw new BusinessException(ResultCode.APPLY_NOT_QUALIFIED, "段位不满足要求");
+            List<Long> tagIdList = parseTagIds(post.getTagIds());
+            boolean levelQualified = false;
+            if (!tagIdList.isEmpty()) {
+                List<UserTag> userTags = userTagMapper.selectList(
+                        new LambdaQueryWrapper<UserTag>()
+                                .eq(UserTag::getUserId, userId)
+                                .in(UserTag::getTagId, tagIdList)
+                );
+                levelQualified = userTags.stream()
+                        .anyMatch(ut -> ut.getSelfLevel() != null && ut.getSelfLevel() >= post.getRequireLevel());
+            }
+            if (!levelQualified) {
+                if (tagIdList.isEmpty()) {
+                    throw new BusinessException(ResultCode.APPLY_NOT_QUALIFIED, "帖子未设置标签，无法校验段位");
+                }
+                throw new BusinessException(ResultCode.APPLY_NOT_QUALIFIED,
+                        "段位不满足要求：该组局要求" + levelName(post.getRequireLevel()) + "以上，请先到「兴趣标签」中设置对应项目的段位");
             }
         }
 
@@ -524,13 +536,36 @@ public class ApplyServiceImpl implements ApplyService {
     }
 
     /**
-     * 解析帖子tagIds中的第一个标签ID
+     * 解析帖子tagIds为标签ID列表（逗号分隔）
      */
-    private Long parseFirstTagId(String tagIds) {
+    private List<Long> parseTagIds(String tagIds) {
+        List<Long> ids = new ArrayList<>();
         if (tagIds == null || tagIds.isEmpty()) {
-            return null;
+            return ids;
         }
-        String[] ids = tagIds.split(",");
-        return Long.parseLong(ids[0].trim());
+        for (String idStr : tagIds.split(",")) {
+            try {
+                ids.add(Long.parseLong(idStr.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * 段位数字转名称
+     */
+    private String levelName(Integer level) {
+        if (level == null) {
+            return "不限";
+        }
+        switch (level) {
+            case 1: return "青铜";
+            case 2: return "白银";
+            case 3: return "黄金";
+            case 4: return "钻石";
+            case 5: return "王者";
+            default: return String.valueOf(level);
+        }
     }
 }
