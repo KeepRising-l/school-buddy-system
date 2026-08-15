@@ -11,6 +11,8 @@ public class ApplyStatus {
     public static final String CANCELLED = "CANCELLED";
     public static final String ATTENDED = "ATTENDED";
     public static final String NOSHOW = "NOSHOW";
+    /** 候补中（帖子满员后进入候补队列，V1.1） */
+    public static final String WAITLIST = "WAITLIST";
 
     private ApplyStatus() {
     }

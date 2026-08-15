@@ -57,10 +57,15 @@ public class ApplyServiceImpl implements ApplyService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void apply(Long userId, Long postId) {
-        // 校验帖子存在且状态为RECRUITING
+        // 校验帖子存在且状态为RECRUITING/FULL（FULL 时走候补逻辑）
         Post post = postMapper.selectById(postId);
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        if (PostStatus.FULL.equals(post.getStatus())) {
+            // V1.1 候补机制：满员时调用候补报名
+            doWaitlist(userId, post);
+            return;
         }
         if (!PostStatus.RECRUITING.equals(post.getStatus())) {
             throw new BusinessException(ResultCode.POST_NOT_RECRUITING);
@@ -127,6 +132,112 @@ public class ApplyServiceImpl implements ApplyService {
                 "/post/" + postId, postId);
     }
 
+    /**
+     * 候补报名（V1.1）：帖子已满员时进入候补队列
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void waitlist(Long userId, Long postId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        // 仅满员状态允许候补
+        if (!PostStatus.FULL.equals(post.getStatus())) {
+            throw new BusinessException("帖子未满员，可直接报名");
+        }
+        doWaitlist(userId, post);
+    }
+
+    /**
+     * 候补报名内部实现
+     */
+    private void doWaitlist(Long userId, Post post) {
+        // 校验不能报名自己发布的帖子
+        if (post.getPublisherId().equals(userId)) {
+            throw new BusinessException("不能报名自己发布的活动");
+        }
+
+        // 校验未重复报名/候补
+        Long applyCount = postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, post.getId())
+                        .eq(PostApply::getApplicantId, userId)
+                        .ne(PostApply::getStatus, ApplyStatus.CANCELLED)
+        );
+        if (applyCount > 0) {
+            throw new BusinessException(ResultCode.APPLY_DUPLICATE);
+        }
+
+        // 校验信誉分
+        User applicant = userMapper.selectById(userId);
+        if (applicant == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        if (creditService.isLowCredit(applicant.getCreditScore())) {
+            throw new BusinessException(ResultCode.CREDIT_TOO_LOW);
+        }
+
+        // 插入候补记录
+        PostApply apply = new PostApply();
+        apply.setPostId(post.getId());
+        apply.setApplicantId(userId);
+        apply.setStatus(ApplyStatus.WAITLIST);
+        apply.setApplyTime(LocalDateTime.now());
+        postApplyMapper.insert(apply);
+
+        // 查询候补位置
+        Long position = postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, post.getId())
+                        .eq(PostApply::getStatus, ApplyStatus.WAITLIST)
+                        .le(PostApply::getApplyTime, apply.getApplyTime())
+        );
+
+        // 通知候补者
+        notificationService.send(userId, Notification.TYPE_WAITLIST_PROMOTED,
+                "已进入候补队列",
+                "组局「" + post.getTitle() + "」已满员，你当前是候补第 " + position + " 位，有人取消将自动递补",
+                "/post/" + post.getId(), post.getId());
+    }
+
+    /**
+     * 自动递补（V1.1）：APPROVED 报名取消后，候补队列第一位转 PENDING 并通知
+     *
+     * @param post 相关帖子
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void promoteWaitlist(Post post) {
+        // 查询候补队列第一位（按候补时间升序）
+        PostApply firstWait = postApplyMapper.selectOne(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, post.getId())
+                        .eq(PostApply::getStatus, ApplyStatus.WAITLIST)
+                        .orderByAsc(PostApply::getApplyTime)
+                        .last("LIMIT 1")
+        );
+        if (firstWait == null) {
+            return;
+        }
+
+        // 递补为待审核
+        firstWait.setStatus(ApplyStatus.PENDING);
+        firstWait.setHandleTime(LocalDateTime.now());
+        postApplyMapper.updateById(firstWait);
+
+        // 通知候补者：有空位了
+        notificationService.send(firstWait.getApplicantId(), Notification.TYPE_WAITLIST_PROMOTED,
+                "有空位啦！",
+                "你候补的组局「" + post.getTitle() + "」有空位了，等待发布者确认",
+                "/post/" + post.getId(), post.getId());
+
+        // 通知发布者：有递补申请
+        notificationService.send(post.getPublisherId(), Notification.TYPE_APPLY_NEW,
+                "有递补申请",
+                "候补用户已递补，请及时审核",
+                "/post/" + post.getId(), post.getId());
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancelApply(Long userId, Long applyId) {
@@ -140,9 +251,11 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException(ResultCode.FORBIDDEN, "只能取消自己的报名");
         }
 
-        // 校验状态可取消（PENDING或APPROVED才能取消）
+        // 校验状态可取消（PENDING/APPROVED/WAITLIST 才能取消，V1.1 支持候补取消）
         String originalStatus = apply.getStatus();
-        if (!ApplyStatus.PENDING.equals(originalStatus) && !ApplyStatus.APPROVED.equals(originalStatus)) {
+        if (!ApplyStatus.PENDING.equals(originalStatus)
+                && !ApplyStatus.APPROVED.equals(originalStatus)
+                && !ApplyStatus.WAITLIST.equals(originalStatus)) {
             throw new BusinessException("当前报名状态不可取消");
         }
 
@@ -164,10 +277,16 @@ public class ApplyServiceImpl implements ApplyService {
         if (ApplyStatus.APPROVED.equals(originalStatus)) {
             postMapper.decrementCurrentPeople(post.getId());
             post = postMapper.selectById(post.getId());
-            if (PostStatus.FULL.equals(post.getStatus())
-                    && post.getCurrentPeople() < post.getMaxPeople()) {
-                post.setStatus(PostStatus.RECRUITING);
-                postMapper.updateById(post);
+
+            // V1.1 候补递补：满员时有候补则先递补（递补后仍是 PENDING，人数不变）
+            if (PostStatus.FULL.equals(post.getStatus())) {
+                promoteWaitlist(post);
+                // 递补后重新查询（递补不改变 current_people，若无人候补则回退）
+                post = postMapper.selectById(post.getId());
+                if (post.getCurrentPeople() < post.getMaxPeople()) {
+                    post.setStatus(PostStatus.RECRUITING);
+                    postMapper.updateById(post);
+                }
             }
         }
 

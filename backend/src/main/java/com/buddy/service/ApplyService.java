@@ -12,6 +12,11 @@ public interface ApplyService {
 
     void apply(Long userId, Long postId);
 
+    /**
+     * 候补报名（V1.1）：帖子满员时进入候补队列
+     */
+    void waitlist(Long userId, Long postId);
+
     void cancelApply(Long userId, Long applyId);
 
     void approve(Long publisherId, Long applyId);

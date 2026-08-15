@@ -138,7 +138,10 @@ const applyStatusText = (status) => {
     PENDING: '待审核',
     APPROVED: '已通过',
     REJECTED: '已拒绝',
-    CANCELLED: '已取消'
+    CANCELLED: '已取消',
+    WAITLIST: '候补中',
+    ATTENDED: '已出勤',
+    NOSHOW: '未到场'
   }
   return map[status] || '未知'
 }
@@ -148,7 +151,10 @@ const applyStatusType = (status) => {
     PENDING: 'primary',
     APPROVED: 'success',
     REJECTED: 'danger',
-    CANCELLED: 'default'
+    CANCELLED: 'default',
+    WAITLIST: 'warning',
+    ATTENDED: 'success',
+    NOSHOW: 'danger'
   }
   return map[status] || 'default'
 }

@@ -34,6 +34,18 @@ public class ApplyController {
     }
 
     /**
+     * 候补报名（V1.1）：帖子满员时进入候补队列
+     * body: {postId: 1}
+     */
+    @PostMapping("/waitlist")
+    public R<Void> waitlist(@RequestBody Map<String, Object> body) {
+        Long userId = UserContext.getUserId();
+        Long postId = Long.valueOf(body.get("postId").toString());
+        applyService.waitlist(userId, postId);
+        return R.ok();
+    }
+
+    /**
      * 取消报名
      */
     @PostMapping("/cancel/{id}")

@@ -173,15 +173,23 @@
             <van-button disabled round block>{{ applyStatus === 'ATTENDED' ? '已出勤' : '已加入' }}</van-button>
             <van-button v-if="applyStatus === 'APPROVED'" plain type="danger" round block @click="handleCancelApply">取消报名</van-button>
           </template>
-          <!-- 已满员（未报名） -->
-          <van-button
-            v-else-if="post.status === 'FULL'"
-            disabled
-            round
-            block
-          >
-            已满员
-          </van-button>
+          <!-- 候补中（V1.1） -->
+          <template v-else-if="applyStatus === 'WAITLIST'">
+            <van-button disabled round block>候补中</van-button>
+            <van-button plain type="danger" round block @click="handleCancelApply">取消候补</van-button>
+          </template>
+          <!-- 已满员（未报名）→ 可候补（V1.1） -->
+          <template v-else-if="post.status === 'FULL'">
+            <van-button
+              type="warning"
+              round
+              block
+              :loading="applyLoading"
+              @click="handleWaitlistJoin"
+            >
+              候补报名
+            </van-button>
+          </template>
           <!-- 进行中/已取消（不可报名） -->
           <van-button
             v-else-if="post.status === 'ONGOING' || post.status === 'CANCELLED'"
@@ -241,7 +249,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { getPostDetail, addComment, getComments } from '@/api/post'
-import { applyJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
+import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
 import { useUserStore } from '@/store/user'
 import CreditStar from '@/components/CreditStar.vue'
@@ -376,6 +384,20 @@ const handleApplyJoin = async () => {
   try {
     await applyJoin(postId)
     showToast('报名成功，等待审核')
+    await fetchDetail()
+  } catch (err) {
+    // 接口层已处理
+  } finally {
+    applyLoading.value = false
+  }
+}
+
+// 候补报名（V1.1）
+const handleWaitlistJoin = async () => {
+  applyLoading.value = true
+  try {
+    await waitlistJoin(postId)
+    showToast('已进入候补队列')
     await fetchDetail()
   } catch (err) {
     // 接口层已处理
