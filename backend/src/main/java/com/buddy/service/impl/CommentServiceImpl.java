@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import cn.hutool.core.util.StrUtil;
+import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
 import com.buddy.dto.response.CommentVO;
@@ -48,6 +49,13 @@ public class CommentServiceImpl implements CommentService {
         Post post = postMapper.selectById(postId);
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        // V1.2 先审后发闭环：未过审/已取消的帖子不可评论
+        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "帖子未通过审核，暂不可评论");
+        }
+        if (PostStatus.CANCELLED.equals(post.getStatus())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "该组局已取消，暂不可评论");
         }
         PostComment comment = new PostComment();
         comment.setPostId(postId);

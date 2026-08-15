@@ -49,10 +49,11 @@ public class ActivityRemindTask {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime remindDeadline = now.plusMinutes(REMIND_BEFORE_MINUTES);
 
-        // 查询即将开始的帖子
+        // 查询即将开始的帖子（V1.2 只提醒已过审的帖子，待审核/被拒的不应打扰用户）
         List<Post> posts = postMapper.selectList(
                 new LambdaQueryWrapper<Post>()
                         .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL, PostStatus.ONGOING)
+                        .eq(Post::getIsAuditPass, 1)
                         .gt(Post::getStartTime, now)
                         .le(Post::getStartTime, remindDeadline)
         );

@@ -320,6 +320,7 @@ public class RecommendServiceImpl implements RecommendService {
     /**
      * 应用时间范围筛选条件
      * @param timeRange today/week/month，为空则不限
+     * V1.2 修复：原来只加下界（ge），"今天"会把未来无限远的帖子也算进来；改为闭区间
      */
     private void applyTimeRangeFilter(LambdaQueryWrapper<Post> wrapper, String timeRange) {
         if (StrUtil.isBlank(timeRange)) {
@@ -327,21 +328,28 @@ public class RecommendServiceImpl implements RecommendService {
         }
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startTime;
+        LocalDateTime endTime;
         switch (timeRange) {
             case "today":
+                // 今天：当天 0 点 ~ 明天 0 点开始的活动
                 startTime = now.toLocalDate().atStartOfDay();
+                endTime = startTime.plusDays(1);
                 break;
             case "week":
-                startTime = now.minusDays(7);
+                // 本周：未来 7 天内开始的活动
+                startTime = now;
+                endTime = now.plusDays(7);
                 break;
             case "month":
-                startTime = now.minusDays(30);
+                // 本月：未来 30 天内开始的活动
+                startTime = now;
+                endTime = now.plusDays(30);
                 break;
             default:
                 return;
         }
-        // 筛选活动开始时间在范围内的帖子
-        wrapper.ge(Post::getStartTime, startTime);
+        wrapper.ge(Post::getStartTime, startTime)
+                .lt(Post::getStartTime, endTime);
     }
 
     /**
