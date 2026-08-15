@@ -1,5 +1,8 @@
 package com.buddy.common.constant;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -13,8 +16,13 @@ import java.util.Set;
  */
 public final class LevelTagCategories {
 
-    /** 有段位体系的分类集合 */
-    public static final Set<String> CATEGORIES = Set.of("球类", "电竞");
+    /**
+     * 有段位体系的分类集合
+     * 注意：项目编译目标为 Java 8，不能使用 Set.of（Java 9+ API）
+     */
+    public static final Set<String> CATEGORIES = Collections.unmodifiableSet(
+            new HashSet<>(Arrays.asList("球类", "电竞"))
+    );
 
     /**
      * 判断分类是否适用段位体系
