@@ -91,8 +91,12 @@ public class FavoriteServiceImpl implements FavoriteService {
             return voPage;
         }
 
-        // 批量查询帖子（避免N+1）
-        List<Post> posts = postMapper.selectBatchIds(postIds);
+        // 批量查询帖子（避免N+1），并过滤下架/未过审的（修复：收藏列表出现幽灵数据）
+        List<Post> posts = postMapper.selectBatchIds(postIds).stream()
+                .filter(p -> p != null
+                        && p.getIsAuditPass() != null && p.getIsAuditPass() == 1
+                        && !"CANCELLED".equals(p.getStatus()))
+                .collect(Collectors.toList());
         voPage.setRecords(posts.stream()
                 .map(this::convertToPostVO)
                 .collect(Collectors.toList()));

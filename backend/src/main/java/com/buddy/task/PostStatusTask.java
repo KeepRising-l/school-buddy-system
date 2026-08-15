@@ -33,6 +33,8 @@ public class PostStatusTask {
         log.info("定时任务：检查帖子状态 RECRUITING/FULL -> ONGOING");
         LambdaUpdateWrapper<Post> wrapper = new LambdaUpdateWrapper<>();
         wrapper.in(Post::getStatus, Arrays.asList(PostStatus.RECRUITING, PostStatus.FULL))
+                // 修复：只推进已审核通过的帖子，待审核的到点也不应变成进行中
+                .eq(Post::getIsAuditPass, 1)
                 .le(Post::getStartTime, LocalDateTime.now())
                 .set(Post::getStatus, PostStatus.ONGOING);
         int count = postMapper.update(null, wrapper);

@@ -333,7 +333,9 @@ public class ApplyServiceImpl implements ApplyService {
         }
 
         // 活动开始前1小时内取消报名，扣除信誉分5分（CAN-03，窗口为 [开始前1小时, 开始时间]）
-        if (post.getStartTime() != null) {
+        // 修复：仅 APPROVED（已占名额）取消才扣分；PENDING/WAITLIST 未占名额不扣
+        if (ApplyStatus.APPROVED.equals(originalStatus)
+                && post.getStartTime() != null) {
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime startTime = post.getStartTime();
             if (now.isAfter(startTime.minusHours(1)) && now.isBefore(startTime)) {

@@ -45,6 +45,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -485,6 +486,7 @@ public class UserServiceImpl implements UserService {
         vo.setReviewTagStats(tagStats);
 
         // 历史组局（发布 + 参加，最多20条；隐私隐藏时不返回 PRO-03）
+        // 修复：原实现只查发布帖，注释却写"发布+参加"，补充参加过的组局
         if (vo.getProfilePrivacy() != 1) {
             List<PostVO> historyPosts = new ArrayList<>();
             List<Post> published = postMapper.selectList(
@@ -494,7 +496,30 @@ public class UserServiceImpl implements UserService {
                             .last("LIMIT 20")
             );
             historyPosts.addAll(published.stream().map(this::convertToPostVO).collect(Collectors.toList()));
-            vo.setHistoryPosts(historyPosts);
+            // 参加过的组局（APPROVED/ATTENDED/FINISHED 等已加入的）
+            List<PostApply> joinedApplies = postApplyMapper.selectList(
+                    new LambdaQueryWrapper<PostApply>()
+                            .eq(PostApply::getApplicantId, userId)
+                            .in(PostApply::getStatus, ApplyStatus.APPROVED, ApplyStatus.ATTENDED, ApplyStatus.NOSHOW)
+                            .orderByDesc(PostApply::getApplyTime)
+                            .last("LIMIT 20")
+            );
+            Set<Long> publishedIds = published.stream().map(Post::getId).collect(Collectors.toSet());
+            for (PostApply apply : joinedApplies) {
+                if (publishedIds.contains(apply.getPostId())) {
+                    continue; // 已包含的发布帖不重复
+                }
+                Post joined = postMapper.selectById(apply.getPostId());
+                if (joined != null) {
+                    historyPosts.add(convertToPostVO(joined));
+                }
+            }
+            // 按创建时间倒序取前20
+            historyPosts.sort((a, b) -> {
+                if (a.getCreatedTime() == null || b.getCreatedTime() == null) return 0;
+                return b.getCreatedTime().compareTo(a.getCreatedTime());
+            });
+            vo.setHistoryPosts(historyPosts.stream().limit(20).collect(Collectors.toList()));
         }
 
         // 收到的评价（最多10条）
