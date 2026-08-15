@@ -159,7 +159,7 @@ const loadMore = async () => {
       page.value++
     }
   } catch (err) {
-    finished.value = true
+    // 修复：失败不置 finished，允许下拉重试（原来伪装成"没有更多了"）
   } finally {
     loading.value = false
     refreshing.value = false

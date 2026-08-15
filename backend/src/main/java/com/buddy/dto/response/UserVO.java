@@ -38,5 +38,11 @@ public class UserVO {
 
     private Integer status;
 
+    /** 发布组局数（我的页统计，V1.1） */
+    private Long postCount;
+
+    /** 报名数（我的页统计，V1.1） */
+    private Long applyCount;
+
     private LocalDateTime createdTime;
 }

@@ -22,6 +22,7 @@ public class AdminTagController {
     /**
      * 标签列表
      */
+    @RequireAdmin
     @GetMapping("/list")
     public R<List<InterestTag>> getAllTags() {
         return R.ok(tagService.getAllTags());
@@ -30,6 +31,7 @@ public class AdminTagController {
     /**
      * 获取所有分类名称列表
      */
+    @RequireAdmin
     @GetMapping("/categories")
     public R<List<String>> getAllCategories() {
         return R.ok(tagService.getAllCategories());

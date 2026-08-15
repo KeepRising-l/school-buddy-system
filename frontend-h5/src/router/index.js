@@ -72,6 +72,12 @@ const routes = [
     meta: { title: '我的收藏', requireAuth: true }
   },
   {
+    path: '/mine/reports',
+    name: 'MyReports',
+    component: () => import('@/views/mine/MyReports.vue'),
+    meta: { title: '我的举报', requireAuth: true }
+  },
+  {
     path: '/message',
     name: 'NotificationList',
     component: () => import('@/views/message/NotificationList.vue'),

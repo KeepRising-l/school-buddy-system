@@ -32,6 +32,9 @@ public class PostDetailVO extends PostVO {
     /** 已报名用户列表 */
     private List<ApplyUserVO> applyUsers;
 
+    /** 可评价用户列表（已出勤的参与者，发布者可评价这些人；V1.1 修复评价流程） */
+    private List<ApplyUserVO> reviewTargets;
+
     /** 当前用户是否已报名 */
     private Boolean hasApplied;
 

@@ -83,24 +83,27 @@ const loadMore = async () => {
     finished.value = (res.data?.records?.length || 0) < size
     page.value++
   } catch (e) {
-    finished.value = true
+    // 修复：失败不置 finished，允许重试（原来会伪装成"没有更多了"）
   } finally {
     loading.value = false
   }
 }
 
+// 下拉刷新（修复：原来发两次重复请求，且失败会清空列表）
 const onRefresh = async () => {
+  const savedPage = page.value
   page.value = 1
-  notificationList.value = []
   try {
-    await getNotifications({ page: 1, size })
+    const res = await getNotifications({ page: 1, size })
+    notificationList.value = res.data?.records || []
+    finished.value = (res.data?.records?.length || 0) < size
+    page.value = 2
+  } catch (e) {
+    // 刷新失败保留原列表
+    page.value = savedPage
   } finally {
     refreshing.value = false
   }
-  // 重新加载第一页
-  finished.value = false
-  loading.value = true
-  await loadMore()
 }
 
 // 点击通知：标记已读 + 跳转

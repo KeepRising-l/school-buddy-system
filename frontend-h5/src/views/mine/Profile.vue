@@ -136,7 +136,7 @@ const onAvatarRead = async (file) => {
     form.avatar = res.data
     showToast('头像上传成功')
   } catch (err) {
-    showToast('头像上传失败')
+    // 修复：拦截器已展示后端具体原因（如"文件大小不能超过2MB"），这里不再覆盖
   }
 }
 

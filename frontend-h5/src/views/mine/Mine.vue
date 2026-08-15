@@ -57,6 +57,7 @@
           <van-cell title="我的发布" is-link to="/mine/posts" icon="notes-o" />
           <van-cell title="我的预约" is-link to="/mine/applies" icon="orders-o" />
           <van-cell title="我的收藏" is-link to="/mine/favorites" icon="star-o" />
+          <van-cell title="我的举报" is-link to="/mine/reports" icon="warning-o" />
         </van-cell-group>
 
         <!-- 退出登录 -->

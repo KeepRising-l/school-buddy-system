@@ -101,6 +101,13 @@
       </div>
     </div>
 
+    <!-- 加载失败（修复：原来失败后永远"加载中..."） -->
+    <div class="loading-area" v-else-if="loadError">
+      <van-empty image="error" description="加载失败">
+        <van-button size="small" type="primary" round @click="reload">重试</van-button>
+      </van-empty>
+    </div>
+
     <!-- 加载中占位 -->
     <div class="loading-area" v-else>
       <van-loading size="24px">加载中...</van-loading>
@@ -123,7 +130,7 @@
         @keyup.enter="handleAddComment"
       >
         <template #button>
-          <van-button size="small" type="primary" @click="handleAddComment">发送</van-button>
+          <van-button size="small" type="primary" :loading="commentSubmitting" @click="handleAddComment">发送</van-button>
         </template>
       </van-field>
 
@@ -156,13 +163,24 @@
           >
             去评价
           </van-button>
+          <!-- 取消组局（V1.2）：后端接口已有，补上前端入口 -->
+          <van-button
+            v-if="post.status === 'RECRUITING' || post.status === 'FULL' || post.status === 'ONGOING'"
+            plain
+            type="danger"
+            round
+            block
+            @click="handleCancelPost"
+          >
+            取消组局
+          </van-button>
         </template>
 
         <!-- 他人视角（后端 applyStatus 为 PENDING/APPROVED/REJECTED/ATTENDED/NOSHOW/CANCELLED） -->
         <template v-else>
-          <!-- 已结束：去评价 -->
+          <!-- 已结束且本人已出勤：可去评价（修复：未参与者不再显示"去评价"按钮） -->
           <van-button
-            v-if="post.status === 'FINISHED'"
+            v-if="post.status === 'FINISHED' && applyStatus === 'ATTENDED'"
             type="primary"
             round
             block
@@ -210,6 +228,23 @@
             block
           >
             {{ post.status === 'CANCELLED' ? '该组局已取消' : '活动进行中' }}
+          </van-button>
+          <!-- 被拒绝/未到场（修复：明确展示状态，而不是显示"报名参加"点了报错） -->
+          <van-button
+            v-else-if="applyStatus === 'REJECTED'"
+            disabled
+            round
+            block
+          >
+            报名未通过
+          </van-button>
+          <van-button
+            v-else-if="applyStatus === 'NOSHOW'"
+            disabled
+            round
+            block
+          >
+            已标记未到场
           </van-button>
           <!-- 未报名 -->
           <van-button
@@ -270,7 +305,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog, showDialog } from 'vant'
-import { getPostDetail, addComment, getComments } from '@/api/post'
+import { getPostDetail, addComment, getComments, cancelPost } from '@/api/post'
 import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
 import { submitReport } from '@/api/report'
@@ -291,6 +326,8 @@ const commentText = ref('')
 const applyLoading = ref(false)
 const showApplySheet = ref(false)
 const applyList = ref([])
+// 加载失败态（V1.1 修复：失败不再无限转圈）
+const loadError = ref(false)
 // 收藏状态（V1.1）
 const favorited = ref(false)
 const favoriteCount = ref(0)
@@ -457,12 +494,21 @@ const formatTime = (time) => {
 
 // 加载帖子详情
 const fetchDetail = async () => {
+  loadError.value = false
   try {
     const res = await getPostDetail(postId)
     post.value = res.data
   } catch (err) {
-    // 接口层已处理
+    // 修复：失败显示错误态+重试按钮，而不是永远"加载中"
+    loadError.value = true
   }
+}
+
+// 重试加载（V1.1）
+const reload = () => {
+  fetchDetail()
+  fetchComments()
+  fetchFavoriteStatus()
 }
 
 // 加载收藏状态（V1.1）
@@ -512,6 +558,11 @@ const fetchComments = async () => {
 
 // 报名参加
 const handleApplyJoin = async () => {
+  // V1.2 游客点击报名：引导登录并回跳原帖（与收藏/举报行为一致）
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: `/post/${postId}` } })
+    return
+  }
   applyLoading.value = true
   try {
     await applyJoin(postId)
@@ -531,6 +582,11 @@ const handleApplyJoin = async () => {
 
 // 候补报名（V1.1）
 const handleWaitlistJoin = async () => {
+  // V1.2 游客点击候补：引导登录并回跳原帖
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: `/post/${postId}` } })
+    return
+  }
   applyLoading.value = true
   try {
     await waitlistJoin(postId)
@@ -544,6 +600,23 @@ const handleWaitlistJoin = async () => {
     })
   } finally {
     applyLoading.value = false
+  }
+}
+
+// 取消组局（V1.2 新增前端入口）
+const handleCancelPost = async () => {
+  try {
+    await showConfirmDialog({
+      title: '取消组局',
+      message: '确定要取消该组局吗？所有已报名用户将收到取消通知，此操作不可恢复。',
+      confirmButtonText: '确定取消',
+      cancelButtonText: '再想想'
+    })
+    await cancelPost(postId)
+    showToast('已取消组局')
+    await fetchDetail()
+  } catch (err) {
+    // 用户取消或接口错误
   }
 }
 
@@ -569,11 +642,15 @@ const handleCancelApply = async () => {
 }
 
 // 发送评论
+// 评论发送（修复：防重复点击，连点会发多条相同评论）
+const commentSubmitting = ref(false)
 const handleAddComment = async () => {
+  if (commentSubmitting.value) return
   if (!commentText.value.trim()) {
     showToast('请输入评论内容')
     return
   }
+  commentSubmitting.value = true
   try {
     await addComment({ postId, content: commentText.value.trim() })
     commentText.value = ''
@@ -581,6 +658,8 @@ const handleAddComment = async () => {
     await fetchComments()
   } catch (err) {
     // 接口层已处理
+  } finally {
+    commentSubmitting.value = false
   }
 }
 

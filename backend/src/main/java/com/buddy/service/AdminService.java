@@ -64,8 +64,10 @@ public interface AdminService {
 
     /**
      * 审核帖子
+     *
+     * @param reason 拒绝原因（拒绝时可选，随通知发送给发布者）
      */
-    void auditPost(Long postId, boolean pass);
+    void auditPost(Long postId, boolean pass, String reason);
 
     /**
      * 物理删除帖子

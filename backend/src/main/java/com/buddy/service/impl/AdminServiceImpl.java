@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -237,12 +238,18 @@ public class AdminServiceImpl implements AdminService {
             apply.setStatus(ApplyStatus.CANCELLED);
             apply.setHandleTime(LocalDateTime.now());
             postApplyMapper.updateById(apply);
+
+            // V1.2 通知被取消报名的用户：不能"悄悄被取消"，让用户知道组局被下架
+            notificationService.send(apply.getApplicantId(), Notification.TYPE_POST_TAKEDOWN,
+                    "组局已下架",
+                    "你报名的组局「" + post.getTitle() + "」已被管理员下架，报名已取消",
+                    "/post/" + postId, postId);
         }
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void auditPost(Long postId, boolean pass) {
+    public void auditPost(Long postId, boolean pass, String reason) {
         Post post = postMapper.selectById(postId);
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
@@ -251,11 +258,18 @@ public class AdminServiceImpl implements AdminService {
         post.setIsAuditPass(pass ? 1 : 2);
         postMapper.updateById(post);
 
-        // V1.1 通知发布者审核结果
+        // V1.1 通知发布者审核结果；V1.2 拒绝时携带具体原因，便于用户修改后重新发布
+        String content;
+        if (pass) {
+            content = "你的组局「" + post.getTitle() + "」已审核通过，现在可在广场看到";
+        } else if (StrUtil.isNotBlank(reason)) {
+            content = "你的组局「" + post.getTitle() + "」未通过审核，原因：" + reason + "。请修改后重新发布";
+        } else {
+            content = "你的组局「" + post.getTitle() + "」未通过审核，请修改后重新发布";
+        }
         notificationService.send(post.getPublisherId(), Notification.TYPE_POST_AUDIT,
                 pass ? "帖子审核通过" : "帖子审核未通过",
-                pass ? "你的组局「" + post.getTitle() + "」已审核通过，现在可在广场看到"
-                        : "你的组局「" + post.getTitle() + "」未通过审核，请修改后重新发布",
+                content,
                 "/post/" + postId, postId);
     }
 

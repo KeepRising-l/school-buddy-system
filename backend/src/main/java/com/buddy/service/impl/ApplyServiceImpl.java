@@ -561,6 +561,12 @@ public class ApplyServiceImpl implements ApplyService {
                         applicant.getCreditScore() + CreditConstant.NOSHOW_PENALTY);
                 applicant.setCreditScore(newScore);
                 userMapper.updateById(applicant);
+
+                // V1.2 通知被扣分用户：信誉分变化必须可感知，避免用户莫名掉分
+                notificationService.send(applicant.getId(), Notification.TYPE_SYSTEM,
+                        "信誉分扣减通知",
+                        "你在组局「" + post.getTitle() + "」中被标记为未到场，信誉分 -10（当前 " + newScore + " 分）",
+                        "/post/" + post.getId(), post.getId());
             }
         }
     }

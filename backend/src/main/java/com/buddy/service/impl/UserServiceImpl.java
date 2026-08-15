@@ -185,14 +185,18 @@ public class UserServiceImpl implements UserService {
         }
 
         // 根据用户名、学号或手机号查询用户（昵称可重复，不作为登录凭证）
-        User user = userMapper.selectOne(
+        // 修复：selectOne + or() 在跨字段碰撞时抛 TooManyResultsException 500，
+        // 改用 selectList 取第一条
+        List<User> matchedUsers = userMapper.selectList(
                 new LambdaQueryWrapper<User>()
                         .eq(User::getUsername, request.getAccount())
                         .or()
                         .eq(User::getStudentNo, request.getAccount())
                         .or()
                         .eq(User::getPhone, request.getAccount())
+                        .last("LIMIT 1")
         );
+        User user = matchedUsers.isEmpty() ? null : matchedUsers.get(0);
         if (user == null) {
             incrementLoginFail(lockKey);
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
@@ -396,6 +400,13 @@ public class UserServiceImpl implements UserService {
         vo.setCreditLabel(creditService.getCreditLabel(user.getCreditScore()));
         vo.setStatus(user.getStatus());
         vo.setCreatedTime(user.getCreatedTime());
+        // 我的页统计（V1.1 修复：原来前端恒显示 0）
+        vo.setPostCount(postMapper.selectCount(
+                new LambdaQueryWrapper<Post>().eq(Post::getPublisherId, user.getId())
+        ));
+        vo.setApplyCount(postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>().eq(PostApply::getApplicantId, user.getId())
+        ));
         return vo;
     }
 

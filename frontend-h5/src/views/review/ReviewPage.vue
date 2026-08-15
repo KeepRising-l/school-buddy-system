@@ -4,10 +4,32 @@
     <van-nav-bar title="评价搭子" left-arrow @click-left="router.back()" />
 
     <div class="content">
+      <!-- 评价窗口提示（V1.2）：活动结束后7天内可评价，避免用户过时才想起来 -->
+      <div class="window-tip">
+        <van-icon name="info-o" />
+        <span>活动结束后 7 天内可评价，逾期将无法提交</span>
+      </div>
+
       <!-- 被评价人信息 -->
       <div class="review-target card">
         <UserAvatar :name="targetUser.nickname" :avatar="targetUser.avatar" :size="50" />
         <span class="target-name">{{ targetUser.nickname || '用户' }}</span>
+      </div>
+
+      <!-- 选择被评价人（发布者视角，多个已出勤参与者时；V1.1） -->
+      <div class="target-select card" v-if="reviewTargets.length > 1">
+        <h3 class="section-title">选择要评价的搭子</h3>
+        <div class="target-list">
+          <div
+            v-for="u in reviewTargets"
+            :key="u.userId"
+            :class="['target-item', { active: String(u.userId) === String(targetUser.id) }]"
+            @click="selectTarget(u)"
+          >
+            <UserAvatar :name="u.nickname" :avatar="u.avatar" :size="32" />
+            <span class="target-item-name">{{ u.nickname }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- 星级评分 -->
@@ -86,6 +108,9 @@ const targetUser = ref({
   avatar: ''
 })
 
+// 可评价的参与者列表（发布者视角，已出勤者；V1.1）
+const reviewTargets = ref([])
+
 // 评价标签选项
 const tagOptions = ['靠谱', '准时', '友好', '技术好', '迟到', '爽约', '态度差']
 
@@ -106,7 +131,7 @@ const toggleTag = (tag) => {
   }
 }
 
-// 加载帖子信息，根据当前用户身份确定被评价人
+// 加载帖子信息，根据当前用户身份确定被评价人（V1.1 修复：发布者只能评价已出勤的参与者）
 const fetchPostInfo = async () => {
   try {
     const res = await getPostDetail(postId)
@@ -115,16 +140,17 @@ const fetchPostInfo = async () => {
     if (!post || !myId) return
 
     if (String(post.publisherId) === String(myId)) {
-      // 当前用户是发布者 → 评价参与者（取第一位已报名的用户）
-      const participants = post.applyUsers || []
-      if (participants.length > 0) {
+      // 当前用户是发布者 → 从可评价列表（已出勤参与者）中选择
+      reviewTargets.value = post.reviewTargets || []
+      if (reviewTargets.value.length > 0) {
         targetUser.value = {
-          id: participants[0].userId,
-          nickname: participants[0].nickname,
-          avatar: participants[0].avatar
+          id: reviewTargets.value[0].userId,
+          nickname: reviewTargets.value[0].nickname,
+          avatar: reviewTargets.value[0].avatar
         }
       } else {
         targetUser.value = { id: '', nickname: '', avatar: '' }
+        showToast('暂无已出勤的参与者可评价')
       }
     } else {
       // 当前用户是参与者 → 评价发布者
@@ -135,8 +161,13 @@ const fetchPostInfo = async () => {
       }
     }
   } catch (err) {
-    // 静默处理
+    // 接口层已处理
   }
+}
+
+// 切换被评价人（发布者多参与者场景）
+const selectTarget = (user) => {
+  targetUser.value = { id: user.userId, nickname: user.nickname, avatar: user.avatar }
 }
 
 // 提交评价
@@ -186,11 +217,59 @@ onMounted(() => {
   }
 }
 
+.target-select {
+  .target-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .target-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--bg-grey);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.3s var(--ease);
+
+      &.active {
+        background: var(--primary-soft);
+        border-color: var(--primary);
+      }
+
+      .target-item-name {
+        font-size: 13px;
+        color: var(--text-primary);
+      }
+    }
+  }
+}
+
 .section-title {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 12px;
+}
+
+// 评价窗口提示（V1.2）
+.window-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: #e8f6f1;
+  border: 1px solid #b8e5d8;
+  font-size: 12px;
+  color: var(--primary);
+
+  .van-icon {
+    flex-shrink: 0;
+  }
 }
 
 .rating-section {

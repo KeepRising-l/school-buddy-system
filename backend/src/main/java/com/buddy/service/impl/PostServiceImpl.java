@@ -244,6 +244,26 @@ public class PostServiceImpl implements PostService {
             detailVO.setPublisherTags(publisherTags);
         }
 
+        // 可评价用户列表：已出勤（ATTENDED）的参与者，供发布者评价（V1.1 修复评价流程断裂）
+        List<PostApply> attendedApplies = postApplyMapper.selectList(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .eq(PostApply::getStatus, ApplyStatus.ATTENDED)
+        );
+        List<PostDetailVO.ApplyUserVO> reviewTargets = new ArrayList<>();
+        for (PostApply apply : attendedApplies) {
+            User attendee = userMapper.selectById(apply.getApplicantId());
+            if (attendee != null) {
+                PostDetailVO.ApplyUserVO vo = new PostDetailVO.ApplyUserVO();
+                vo.setUserId(attendee.getId());
+                vo.setNickname(attendee.getNickname());
+                vo.setAvatar(attendee.getAvatar());
+                vo.setCreditLevel(creditService.getCreditLevel(attendee.getCreditScore()));
+                reviewTargets.add(vo);
+            }
+        }
+        detailVO.setReviewTargets(reviewTargets);
+
         return detailVO;
     }
 

@@ -74,7 +74,7 @@ const loadMore = async () => {
     finished.value = (res.data?.records?.length || 0) < size
     page.value++
   } catch (e) {
-    finished.value = true
+    // 修复：失败不置 finished，允许重试
   } finally {
     loading.value = false
   }

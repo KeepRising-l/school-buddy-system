@@ -48,7 +48,7 @@ public class AdminPostController {
 
     /**
      * 审核帖子
-     * body: {pass: true}
+     * body: {pass: true, reason: "拒绝原因（拒绝时建议填写）"}
      */
     @RequireAdmin
     @PostMapping("/audit/{id}")
@@ -67,7 +67,9 @@ public class AdminPostController {
         } else {
             throw new BusinessException(ResultCode.BAD_REQUEST, "审核结果参数不合法");
         }
-        adminService.auditPost(id, pass);
+        // 拒绝原因（拒绝时可选，用于通知发布者明确违规点，避免用户无从修改）
+        String reason = body == null ? null : (String) body.get("reason");
+        adminService.auditPost(id, pass, reason);
         return R.ok();
     }
 

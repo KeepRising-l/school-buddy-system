@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -101,7 +102,11 @@ public class ReviewServiceImpl implements ReviewService {
         if (post.getEndTime() != null) {
             long daysSinceFinished = ChronoUnit.DAYS.between(post.getEndTime(), LocalDateTime.now());
             if (daysSinceFinished > REVIEW_WINDOW_DAYS) {
-                throw new BusinessException(ResultCode.REVIEW_WINDOW_EXPIRED);
+                // V1.2 报错带上具体截止时间，用户才知道窗口何时关闭
+                LocalDateTime deadline = post.getEndTime().plusDays(REVIEW_WINDOW_DAYS);
+                throw new BusinessException(ResultCode.REVIEW_WINDOW_EXPIRED,
+                        "评价窗口已关闭：活动结束后" + REVIEW_WINDOW_DAYS + "天内可评价（截止 " +
+                                deadline.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "）");
             }
         }
 

@@ -214,15 +214,30 @@ const handleView = (row) => {
   window.open(`${h5Base}/post/${row.id}`, '_blank')
 }
 
-// 审核帖子
+// 审核帖子（拒绝时填写原因，随通知发送给发布者）
 const handleAudit = async (row, pass) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要${pass ? '通过' : '拒绝'}帖子「${row.title}」的审核吗？`,
-      '审核确认',
-      { type: pass ? 'success' : 'warning' }
-    )
-    await auditPost(row.id, { pass })
+    let reason = ''
+    if (!pass) {
+      const { value } = await ElMessageBox.prompt(
+        '请填写拒绝原因（将随通知发送给发布者，帮助其修改后重新发布）',
+        '拒绝审核',
+        {
+          confirmButtonText: '确认拒绝',
+          cancelButtonText: '取消',
+          inputType: 'textarea',
+          inputPlaceholder: '例如：标题与内容不符 / 地点信息不完整 / 疑似广告',
+          inputValidator: (v) => (v && v.trim().length > 0) || '请填写拒绝原因',
+          inputErrorMessage: '请填写拒绝原因'
+        }
+      )
+      reason = value.trim()
+    } else {
+      await ElMessageBox.confirm(`确定要通过帖子「${row.title}」的审核吗？`, '审核确认', {
+        type: 'success'
+      })
+    }
+    await auditPost(row.id, { pass, reason: reason || undefined })
     ElMessage.success(pass ? '审核通过' : '已拒绝')
     loadData()
   } catch (e) {
