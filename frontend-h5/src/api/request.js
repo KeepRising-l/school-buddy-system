@@ -42,7 +42,15 @@ request.interceptors.response.use(
       router.push('/login')
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
-    showToast(res.message || '操作失败')
+    // 业务错误：完整展示后端消息（支持长文本换行，显示3.5秒）
+    // silent 请求由调用方自己处理错误提示（如报名弹窗），这里不再重复弹 toast
+    if (!response.config.silent) {
+      showToast({
+        message: res.message || '操作失败',
+        duration: 3500,
+        wordBreak: 'break-word'
+      })
+    }
     return Promise.reject(new Error(res.message || '操作失败'))
   },
   error => {
@@ -54,7 +62,11 @@ request.interceptors.response.use(
       router.push('/login')
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
-    showToast('网络错误，请稍后重试')
+    showToast({
+      message: error.response?.data?.message || '网络错误，请稍后重试',
+      duration: 3500,
+      wordBreak: 'break-word'
+    })
     return Promise.reject(error)
   }
 )

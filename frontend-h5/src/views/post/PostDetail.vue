@@ -441,7 +441,12 @@ const handleApplyJoin = async () => {
     showToast('报名成功，等待审核')
     await fetchDetail()
   } catch (err) {
-    // 接口层已处理
+    // 关键操作：用弹窗展示后端返回的具体原因（如段位不满足），避免用户不知道失败原因
+    showDialog({
+      title: '报名失败',
+      message: err.message || '请稍后重试',
+      confirmButtonText: '知道了'
+    })
   } finally {
     applyLoading.value = false
   }
@@ -455,7 +460,11 @@ const handleWaitlistJoin = async () => {
     showToast('已进入候补队列')
     await fetchDetail()
   } catch (err) {
-    // 接口层已处理
+    showDialog({
+      title: '候补失败',
+      message: err.message || '请稍后重试',
+      confirmButtonText: '知道了'
+    })
   } finally {
     applyLoading.value = false
   }
