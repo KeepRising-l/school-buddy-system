@@ -88,16 +88,18 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getSquareList } from '@/api/post'
+import { getAllCategories } from '@/api/tag'
 import TabbarLayout from '@/components/TabbarLayout.vue'
 import PostCard from '@/components/PostCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
 
-const categories = [
+// 分类筛选（V1.2 动态加载：跟随管理端分类配置，新增/禁用自动同步；失败回退内置列表）
+const defaultCategories = [
   { label: '全部', value: '' },
   { label: '球类', value: '球类' },
   { label: '电竞', value: '电竞' },
@@ -106,6 +108,24 @@ const categories = [
   { label: '健身', value: '健身' },
   { label: '学习', value: '学习' }
 ]
+const categories = ref([{ label: '全部', value: '' }])
+
+const fetchCategories = async () => {
+  try {
+    const res = await getAllCategories()
+    const list = res.data || []
+    if (list.length) {
+      categories.value = [{ label: '全部', value: '' }, ...list.map(c => ({ label: c, value: c }))]
+    }
+    // 当前选中的分类被禁用/移除时重置为"全部"
+    if (currentCategory.value && !categories.value.some(c => c.value === currentCategory.value)) {
+      currentCategory.value = ''
+    }
+  } catch (e) {
+    // 加载失败回退内置分类，保证筛选可用
+    categories.value = defaultCategories
+  }
+}
 
 const sortOptions = [
   { label: '推荐', value: 'recommend' },
@@ -211,6 +231,10 @@ const switchTime = (time) => {
 const goDetail = (id) => {
   router.push(`/post/${id}`)
 }
+
+onMounted(() => {
+  fetchCategories()
+})
 </script>
 
 <style scoped lang="scss">

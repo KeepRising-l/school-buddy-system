@@ -95,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUserProfile } from '@/api/user'
 import CreditStar from '@/components/CreditStar.vue'
@@ -104,7 +104,8 @@ import UserAvatar from '@/components/UserAvatar.vue'
 const route = useRoute()
 const router = useRouter()
 
-const userId = route.params.userId
+// 用户ID（可变：主页之间跳转时组件复用，需跟随路由参数更新）
+let userId = route.params.userId
 const profile = ref(null)
 
 const creditBadgeClass = computed(() => {
@@ -154,6 +155,17 @@ const formatTime = (time) => {
   const d = new Date(time)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
+
+// 路由参数变化（/user/1 -> /user/2）时重新加载，避免组件复用导致数据错乱（V1.2 修复）
+watch(
+  () => route.params.userId,
+  (newId) => {
+    if (!newId || String(newId) === String(userId)) return
+    userId = newId
+    profile.value = null
+    fetchProfile()
+  }
+)
 
 onMounted(() => {
   fetchProfile()

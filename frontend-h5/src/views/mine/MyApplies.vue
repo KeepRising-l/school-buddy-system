@@ -182,7 +182,7 @@ const loadMyApplies = async () => {
       myPage.value++
     }
   } catch (err) {
-    myFinished.value = true
+    // 修复：失败不置 finished，允许滚动重试（原来会伪装成"没有更多了"）
   } finally {
     myLoading.value = false
     myRefreshing.value = false
@@ -205,7 +205,7 @@ const loadReceivedApplies = async () => {
       receivedPage.value++
     }
   } catch (err) {
-    receivedFinished.value = true
+    // 修复：失败不置 finished，允许滚动重试（原来会伪装成"没有更多了"）
   } finally {
     receivedLoading.value = false
     receivedRefreshing.value = false

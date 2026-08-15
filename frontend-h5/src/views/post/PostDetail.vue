@@ -302,7 +302,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog, showDialog } from 'vant'
 import { getPostDetail, addComment, getComments, cancelPost } from '@/api/post'
@@ -319,7 +319,8 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-const postId = route.params.id
+// 帖子ID（可变：详情页之间跳转时组件复用，需跟随路由参数更新）
+let postId = route.params.id
 const post = ref(null)
 const commentList = ref([])
 const commentText = ref('')
@@ -645,6 +646,11 @@ const handleCancelApply = async () => {
 // 评论发送（修复：防重复点击，连点会发多条相同评论）
 const commentSubmitting = ref(false)
 const handleAddComment = async () => {
+  // V1.2 游客点击发送：引导登录并回跳原帖（与报名/收藏/举报行为一致）
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: `/post/${postId}` } })
+    return
+  }
   if (commentSubmitting.value) return
   if (!commentText.value.trim()) {
     showToast('请输入评论内容')
@@ -750,12 +756,34 @@ const goPublisherProfile = () => {
   }
 }
 
-onMounted(() => {
+// 加载全部数据（详情/评论/收藏/标签）
+const loadAll = () => {
   fetchDetail()
   fetchComments()
   fetchFavoriteStatus()
   fetchMyTags()
-})
+}
+
+// 路由参数变化（/post/1 -> /post/2）时重置状态并重新加载，
+// 否则组件复用导致页面停留在上一个帖子的数据（V1.2 修复）
+watch(
+  () => route.params.id,
+  (newId) => {
+    if (!newId || String(newId) === String(postId)) return
+    postId = newId
+    post.value = null
+    loadError.value = false
+    commentList.value = []
+    commentText.value = ''
+    favorited.value = false
+    favoriteCount.value = 0
+    applyList.value = []
+    showApplySheet.value = false
+    loadAll()
+  }
+)
+
+onMounted(loadAll)
 </script>
 
 <style scoped lang="scss">
