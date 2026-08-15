@@ -140,8 +140,9 @@ onMounted(() => {
 .user-header {
   background: var(--bg-card);
   padding: 24px 20px 20px;
-  border-radius: 0 0 28px 28px;
+  border-radius: 0 0 32px 32px;
   box-shadow: 0 20px 40px -28px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
 }
 
 .user-card {

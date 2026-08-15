@@ -245,13 +245,22 @@
         <EmptyState v-else icon="friends-o" text="暂无报名" />
       </div>
     </van-popup>
+
+    <!-- 举报类型选择（V1.1） -->
+    <van-action-sheet
+      v-model:show="showReportSheet"
+      title="举报该组局"
+      :actions="reportActions"
+      cancel-text="取消"
+      @select="onReportSelect"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast, showConfirmDialog, showActionSheet, showDialog } from 'vant'
+import { showToast, showConfirmDialog, showDialog } from 'vant'
 import { getPostDetail, addComment, getComments } from '@/api/post'
 import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
@@ -275,6 +284,14 @@ const applyList = ref([])
 // 收藏状态（V1.1）
 const favorited = ref(false)
 const favoriteCount = ref(0)
+// 举报状态（V1.1）
+const showReportSheet = ref(false)
+const reportActions = [
+  { name: '违规内容（广告/色情/违法）' },
+  { name: '虚假信息（信息与实际不符）' },
+  { name: '恶意行为（恶意报名/骚扰）' },
+  { name: '其他问题' }
+]
 
 // 状态映射
 const statusMap = {
@@ -328,33 +345,28 @@ const handleReport = async () => {
     router.push({ path: '/login', query: { redirect: `/post/${postId}` } })
     return
   }
+  showReportSheet.value = true
+}
+
+// 选择举报类型
+const onReportSelect = async (action) => {
+  showReportSheet.value = false
+  if (!action || !action.name) return
   try {
-    const action = await showActionSheet({
-      title: '举报该组局',
-      actions: [
-        { name: '违规内容（广告/色情/违法）' },
-        { name: '虚假信息（信息与实际不符）' },
-        { name: '恶意行为（恶意报名/骚扰）' },
-        { name: '其他问题' }
-      ],
-      cancelText: '取消'
-    })
-    if (!action) return
     await showDialog({
       title: '确认举报',
       message: `举报类型：${action.name}。请确认举报内容真实有效，恶意举报将影响你的信誉。`,
       showCancelButton: true,
       confirmButtonText: '提交举报',
       cancelButtonText: '再想想'
-    }).then(async () => {
-      await submitReport({
-        targetType: 'POST',
-        targetId: Number(postId),
-        reasonType: action.name.replace(/（.*）/, ''),
-        description: action.name
-      })
-      showToast('举报已提交，等待处理')
     })
+    await submitReport({
+      targetType: 'POST',
+      targetId: Number(postId),
+      reasonType: action.name.replace(/（.*）/, ''),
+      description: action.name
+    })
+    showToast('举报已提交，等待处理')
   } catch (e) {
     // 用户取消或接口错误（拦截器已提示）
   }

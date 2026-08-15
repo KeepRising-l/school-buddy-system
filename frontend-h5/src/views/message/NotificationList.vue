@@ -16,7 +16,7 @@
           finished-text="没有更多通知了"
           @load="loadMore"
         >
-          <div v-for="item in notificationList" :key="item.id" class="notification-item card" @click="handleClick(item)">
+          <div v-for="item in notificationList" :key="item.id" class="notification-item card stagger-item" @click="handleClick(item)">
             <div class="noti-left">
               <div class="noti-icon" :class="iconClass(item.type)">
                 <van-icon :name="iconName(item.type)" />

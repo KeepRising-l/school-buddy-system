@@ -83,7 +83,8 @@ const formatTime = (time) => {
   border-radius: 20px;
   padding: 18px;
   margin-bottom: 14px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card), var(--shadow-inset-highlight);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   cursor: pointer;
   transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
 

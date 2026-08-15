@@ -43,23 +43,33 @@ const active = ref(0)
       align-items: center;
       justify-content: center;
     }
+
+    // 选中（进入发布页）时 + 号旋转 45° 成 ×，动能反馈
+    &.van-tabbar-item--active {
+      .publish-btn {
+        transform: rotate(45deg);
+        background: var(--primary-dark);
+      }
+    }
   }
 
   .publish-btn {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: #10a37f;
+    background: var(--primary-gradient);
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: 0 8px 16px -6px rgba(16, 163, 127, 0.5);
-    transition: transform 0.2s var(--ease);
+    transition: transform 0.4s var(--ease), background 0.3s var(--ease),
+      box-shadow 0.3s var(--ease);
 
     .van-icon {
       color: #fff;
       font-size: 16px;
       font-weight: bold;
+      transition: transform 0.4s var(--ease);
     }
 
     &:active {

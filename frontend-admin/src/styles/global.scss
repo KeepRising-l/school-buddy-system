@@ -103,10 +103,24 @@ body,
   justify-content: flex-end;
 }
 
-// 卡片基础：柔和圆角 + 扩散阴影
+// 卡片基础：柔和圆角 + 扩散阴影 + 内高光（Double-Bezel 质感）
 .el-card {
   --el-card-border-radius: 16px;
   border-color: var(--el-border-color-lighter);
+  box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  transition: box-shadow 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+
+  &:hover {
+    box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.12),
+      inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  }
+}
+
+// 管理端登录页氛围：渐变背景
+.login-container {
+  background: linear-gradient(160deg, #f6f7f9 0%, #e9f7f2 55%, #fdf3e0 100%) !important;
 }
 
 // 无障碍：尊重系统减弱动效

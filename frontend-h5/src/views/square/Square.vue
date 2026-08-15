@@ -3,6 +3,7 @@
     <div class="square-page page-with-tabbar">
       <!-- 顶部区域 -->
       <div class="square-header">
+        <span class="eyebrow">探索校园</span>
         <h1 class="page-title">发现组局</h1>
         <p class="page-subtitle">找到志同道合的伙伴</p>
       </div>
@@ -66,9 +67,10 @@
         >
           <div class="post-list content">
             <PostCard
-              v-for="post in postList"
+              v-for="(post, index) in postList"
               :key="post.id"
               :post="post"
+              class="stagger-item"
               @click="goDetail(post.id)"
             />
             <EmptyState
@@ -218,14 +220,19 @@ const goDetail = (id) => {
 
 .square-header {
   background: var(--bg-card);
-  padding: 24px 20px 36px;
-  border-radius: 0 0 28px 28px;
+  padding: 24px 20px 40px;
+  border-radius: 0 0 32px 32px;
   box-shadow: 0 20px 40px -28px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+
+  .eyebrow {
+    margin-bottom: 10px;
+  }
 
   .page-title {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
   }
 
@@ -237,7 +244,7 @@ const goDetail = (id) => {
 }
 
 .search-wrap {
-  margin: -24px 16px 0;
+  margin: -28px 16px 0;
   position: relative;
   z-index: 1;
 
@@ -247,9 +254,9 @@ const goDetail = (id) => {
 
   :deep(.van-search__content) {
     background: var(--bg-card);
-    box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.14), var(--shadow-inset-highlight);
     border-radius: 999px;
-    border: 1px solid var(--border-light);
+    border: 1px solid rgba(255, 255, 255, 0.8);
   }
 }
 
