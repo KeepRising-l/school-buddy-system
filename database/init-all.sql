@@ -214,6 +214,24 @@ CREATE TABLE `report` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='举报表';
 
 -- -----------------------------------------------------
+-- 10. 信誉分变动台账表（V1.2 新增）
+--     记录非评价类的信誉分变动（爽约/临场取消/管理员重置），
+--     每日重算公式 = 100 + Σ评价影响 + Σ台账变动，惩罚不再被重算冲掉
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `credit_log`;
+CREATE TABLE `credit_log` (
+    `id`           BIGINT       NOT NULL AUTO_INCREMENT,
+    `user_id`      BIGINT       NOT NULL             COMMENT '用户ID',
+    `change_value` INT          NOT NULL             COMMENT '变动值（正加负减）',
+    `reason`       VARCHAR(64)  NOT NULL             COMMENT '原因：NOSHOW/CANCEL_LAST_MINUTE/ADMIN_RESET',
+    `biz_type`     VARCHAR(32)  DEFAULT NULL         COMMENT '业务类型：APPLY/ADMIN',
+    `biz_id`       BIGINT       DEFAULT NULL         COMMENT '业务对象ID',
+    `created_time` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信誉分变动台账';
+
+-- -----------------------------------------------------
 -- 初始数据：一个管理员 + 若干兴趣标签 + 测试学生
 -- 密码 123456 的 BCrypt: $2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka
 -- -----------------------------------------------------
