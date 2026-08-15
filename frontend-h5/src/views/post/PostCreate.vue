@@ -255,13 +255,16 @@ const rankColumns = [
   { text: '王者', value: 5 }
 ]
 
-// 时间选择器（默认值取当天，避免硬编码过期日期导致发帖校验失败）
+// 时间选择器：默认值取「当前时间+2小时」，保证发布时校验必过
+// （若默认取当天，用户不改时间直接确认会得到已过去的时间，导致发帖失败）
 const minDate = new Date()
-const today = new Date()
-const startDatePicker = ref([String(today.getFullYear()), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')])
-const endDatePicker = ref([String(today.getFullYear()), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')])
-const startTimePicker = ref(['09', '00'])
-const endTimePicker = ref(['18', '00'])
+const now = new Date()
+const defaultStart = new Date(now.getTime() + 2 * 60 * 60 * 1000)
+const defaultEnd = new Date(defaultStart.getTime() + 2 * 60 * 60 * 1000)
+const startDatePicker = ref([String(defaultStart.getFullYear()), String(defaultStart.getMonth() + 1).padStart(2, '0'), String(defaultStart.getDate()).padStart(2, '0')])
+const endDatePicker = ref([String(defaultEnd.getFullYear()), String(defaultEnd.getMonth() + 1).padStart(2, '0'), String(defaultEnd.getDate()).padStart(2, '0')])
+const startTimePicker = ref([String(defaultStart.getHours()).padStart(2, '0'), String(defaultStart.getMinutes()).padStart(2, '0')])
+const endTimePicker = ref([String(defaultEnd.getHours()).padStart(2, '0'), String(defaultEnd.getMinutes()).padStart(2, '0')])
 
 // 分类确认
 const onCategoryConfirm = ({ selectedOptions }) => {
@@ -358,14 +361,26 @@ const validate = () => {
     return false
   }
   // 时间校验（PRD：开始时间须晚于当前1小时，结束须晚于开始）
+  // 提示语说明具体原因，避免用户不知道错在哪
+  const now = new Date()
   const start = new Date(form.startTime.replace(/-/g, '/'))
   const end = new Date(form.endTime.replace(/-/g, '/'))
-  if (start <= Date.now() + 60 * 60 * 1000) {
-    showToast('开始时间需晚于当前时间1小时')
+
+  if (start <= now) {
+    showToast('开始时间已过去，请选择未来的时间（当前时间 ' + formatNow(now) + '）')
+    return false
+  }
+  if (start <= now.getTime() + 60 * 60 * 1000) {
+    showToast('开始时间距现在不足1小时，请选晚一点的时间')
     return false
   }
   if (end <= start) {
-    showToast('结束时间必须晚于开始时间')
+    // 用户明确要求：开始晚于结束时要提示选错了 + 为什么
+    showToast('时间选错了：开始时间（' + formatDateTime(start) + '）晚于结束时间（' + formatDateTime(end) + '），请重新选择')
+    return false
+  }
+  if (end - start > 24 * 60 * 60 * 1000) {
+    showToast('活动时长不能超过24小时，请调整开始/结束时间')
     return false
   }
   if (!form.location) {
@@ -373,6 +388,16 @@ const validate = () => {
     return false
   }
   return true
+}
+
+// 格式化当前时间（仅时分）
+const formatNow = (d) => {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// 格式化完整时间
+const formatDateTime = (d) => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 // 提交发布
