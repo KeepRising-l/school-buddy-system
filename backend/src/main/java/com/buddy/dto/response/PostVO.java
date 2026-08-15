@@ -50,5 +50,8 @@ public class PostVO {
     /** 标签名称（逗号分隔，用于列表展示） */
     private String tagName;
 
+    /** 审核状态：0待审核 1已通过 2已拒绝（V1.1 先审后发） */
+    private Integer isAuditPass;
+
     private LocalDateTime createdTime;
 }

@@ -276,6 +276,7 @@ public class RecommendServiceImpl implements RecommendService {
         vo.setPublisherId(post.getPublisherId());
         vo.setCreatedTime(post.getCreatedTime());
         vo.setDescription(post.getDescription());
+        vo.setIsAuditPass(post.getIsAuditPass());
 
         // 根据tagIds查询标签名称
         if (StrUtil.isNotBlank(post.getTagIds())) {

@@ -23,7 +23,12 @@
           <div v-for="post in postList" :key="post.id" class="my-post-card" @click="goDetail(post.id)">
             <div class="post-header">
               <span class="post-title">{{ post.title }}</span>
-              <van-tag :type="statusTagType(post.status)" size="medium">{{ statusText(post.status) }}</van-tag>
+              <div class="post-tags">
+                <!-- 审核状态徽章（V1.1 先审后发） -->
+                <van-tag v-if="post.isAuditPass === 0" type="warning" size="medium">待审核</van-tag>
+                <van-tag v-else-if="post.isAuditPass === 2" type="danger" size="medium">未通过</van-tag>
+                <van-tag :type="statusTagType(post.status)" size="medium">{{ statusText(post.status) }}</van-tag>
+              </div>
             </div>
             <div class="post-info">
               <span>{{ post.category }}</span>
@@ -55,7 +60,7 @@
         <div class="apply-list" v-if="applyList.length">
           <div v-for="item in applyList" :key="item.id" class="apply-item">
             <div class="apply-user">
-              <span class="apply-nickname">用户{{ item.applicantId }}</span>
+              <span class="apply-nickname">{{ item.applicantNickname || '用户' + item.applicantId }}</span>
               <van-tag :type="applyStatusType(item.status)" size="medium">{{ applyStatusText(item.status) }}</van-tag>
             </div>
             <div class="apply-actions" v-if="item.status === 'PENDING'">

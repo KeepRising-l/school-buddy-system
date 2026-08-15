@@ -138,6 +138,7 @@ public class FavoriteServiceImpl implements FavoriteService {
         vo.setPublisherId(post.getPublisherId());
         vo.setCreatedTime(post.getCreatedTime());
         vo.setDescription(post.getDescription());
+        vo.setIsAuditPass(post.getIsAuditPass());
 
         User publisher = userMapper.selectById(post.getPublisherId());
         if (publisher != null) {

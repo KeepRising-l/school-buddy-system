@@ -255,10 +255,11 @@ const rankColumns = [
   { text: '王者', value: 5 }
 ]
 
-// 时间选择器
+// 时间选择器（默认值取当天，避免硬编码过期日期导致发帖校验失败）
 const minDate = new Date()
-const startDatePicker = ref(['2026', '01', '01'])
-const endDatePicker = ref(['2026', '01', '01'])
+const today = new Date()
+const startDatePicker = ref([String(today.getFullYear()), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')])
+const endDatePicker = ref([String(today.getFullYear()), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')])
 const startTimePicker = ref(['09', '00'])
 const endTimePicker = ref(['18', '00'])
 
@@ -393,8 +394,9 @@ const handleSubmit = async () => {
       requireGender: form.requireGender,
       description: form.description
     })
-    showToast('发布成功')
-    router.back()
+    // V1.1 先审后发：发布后进入待审核，需管理员通过后才在广场展示
+    showToast('已提交审核，通过后将在广场展示')
+    router.replace('/mine/posts')
   } catch (err) {
     // 接口层已处理
   } finally {

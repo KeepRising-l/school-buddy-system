@@ -297,6 +297,7 @@ public class AdminServiceImpl implements AdminService {
         vo.setViewCount(post.getViewCount());
         vo.setPublisherId(post.getPublisherId());
         vo.setCreatedTime(post.getCreatedTime());
+        vo.setIsAuditPass(post.getIsAuditPass());
 
         // 查询发布者信息
         User publisher = userMapper.selectById(post.getPublisherId());
