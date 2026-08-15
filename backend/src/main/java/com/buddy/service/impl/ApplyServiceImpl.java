@@ -11,6 +11,7 @@ import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
 import com.buddy.common.statemachine.PostStateMachine;
 import com.buddy.dto.response.ApplyVO;
+import com.buddy.entity.CreditLog;
 import com.buddy.entity.Post;
 import com.buddy.entity.PostApply;
 import com.buddy.entity.User;
@@ -351,15 +352,15 @@ public class ApplyServiceImpl implements ApplyService {
 
         // 活动开始前1小时内取消报名，扣除信誉分5分（CAN-03，窗口为 [开始前1小时, 开始时间]）
         // 修复：仅 APPROVED（已占名额）取消才扣分；PENDING/WAITLIST 未占名额不扣
-        // V1.2 原子更新，避免并发丢更新
+        // V1.2 写台账+即时重算，惩罚实时生效且不被每日重算冲掉
         if (ApplyStatus.APPROVED.equals(originalStatus)
                 && post.getStartTime() != null) {
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime startTime = post.getStartTime();
             if (now.isAfter(startTime.minusHours(1)) && now.isBefore(startTime)) {
-                userMapper.update(null, new LambdaUpdateWrapper<User>()
-                        .eq(User::getId, userId)
-                        .setSql("credit_score = GREATEST(0, credit_score + " + CreditConstant.CANCEL_LAST_MINUTE + ")"));
+                creditService.recordPenalty(userId,
+                        CreditConstant.CANCEL_LAST_MINUTE, CreditLog.REASON_CANCEL_LAST_MINUTE,
+                        CreditLog.BIZ_TYPE_APPLY, applyId);
             }
         }
     }
@@ -608,19 +609,15 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("该报名状态已变更，请刷新后重试");
         }
 
-        // 未到场扣信誉分10分（V1.2 原子更新，避免并发丢更新）
+        // 未到场扣信誉分10分（V1.2 写台账+即时重算：实时生效且不被每日重算冲掉）
         if (!attended) {
-            int updated = userMapper.update(null, new LambdaUpdateWrapper<User>()
-                    .eq(User::getId, apply.getApplicantId())
-                    .setSql("credit_score = GREATEST(0, credit_score + " + CreditConstant.NOSHOW_PENALTY + ")"));
-            if (updated > 0) {
-                User applicant = userMapper.selectById(apply.getApplicantId());
-                // V1.2 通知被扣分用户：信誉分变化必须可感知，避免用户莫名掉分
-                notificationService.send(apply.getApplicantId(), Notification.TYPE_SYSTEM,
-                        "信誉分扣减通知",
-                        "你在组局「" + post.getTitle() + "」中被标记为未到场，信誉分 -10（当前 " + applicant.getCreditScore() + " 分）",
-                        "/post/" + post.getId(), post.getId());
-            }
+            int newScore = creditService.recordPenalty(apply.getApplicantId(),
+                    CreditConstant.NOSHOW_PENALTY, CreditLog.REASON_NOSHOW, CreditLog.BIZ_TYPE_APPLY, applyId);
+            // V1.2 通知被扣分用户：信誉分变化必须可感知，避免用户莫名掉分
+            notificationService.send(apply.getApplicantId(), Notification.TYPE_SYSTEM,
+                    "信誉分扣减通知",
+                    "你在组局「" + post.getTitle() + "」中被标记为未到场，信誉分 -10（当前 " + newScore + " 分）",
+                    "/post/" + post.getId(), post.getId());
         }
     }
 

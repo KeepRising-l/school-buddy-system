@@ -48,11 +48,19 @@ public class JwtInterceptor implements HandlerInterceptor {
             token = token.substring(7);
         }
 
-        // Token 为空，返回401
+        // V1.2 可选登录：无 Token 的请求按游客放行（广场/详情等公开接口需要游客可访问，
+        // 同时登录用户带上 Token 时能解析出身份，恢复"我已报名"、个性化推荐、浏览量去重）
         if (token == null || token.isEmpty()) {
-            log.warn("请求缺少Token: {} {}", request.getMethod(), request.getRequestURI());
-            writeUnauthorized(response, "未登录，请先登录");
-            return false;
+            // 管理接口必须登录
+            if (handler instanceof HandlerMethod) {
+                RequireAdmin requireAdmin = ((HandlerMethod) handler).getMethodAnnotation(RequireAdmin.class);
+                if (requireAdmin != null) {
+                    log.warn("未登录访问管理接口: {}", request.getRequestURI());
+                    writeUnauthorized(response, "未登录，请先登录");
+                    return false;
+                }
+            }
+            return true;
         }
 
         // 校验 Token 有效性

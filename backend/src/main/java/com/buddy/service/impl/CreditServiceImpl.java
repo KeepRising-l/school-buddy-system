@@ -2,8 +2,10 @@ package com.buddy.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buddy.common.constant.CreditConstant;
+import com.buddy.entity.CreditLog;
 import com.buddy.entity.Review;
 import com.buddy.entity.User;
+import com.buddy.mapper.CreditLogMapper;
 import com.buddy.mapper.ReviewMapper;
 import com.buddy.mapper.UserMapper;
 import com.buddy.service.CreditService;
@@ -25,6 +27,9 @@ public class CreditServiceImpl implements CreditService {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private CreditLogMapper creditLogMapper;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void recalculateUserCredit(Long userId) {
@@ -33,15 +38,14 @@ public class CreditServiceImpl implements CreditService {
             return;
         }
 
-        // 查询用户所有收到的评价
-        List<Review> reviews = reviewMapper.selectList(
-                new LambdaQueryWrapper<Review>().eq(Review::getTargetUserId, userId)
-        );
-
-        // 计算信誉分 = 100 + Σ评价影响
+        // 信誉分 = 100 + Σ评价影响 + Σ台账变动（V1.2 加入台账，惩罚不再被重算冲掉）
         int creditScore = CreditConstant.INITIAL_SCORE;
-        for (Review review : reviews) {
-            creditScore += calculateReviewImpact(review);
+        creditScore += getReviewImpact(userId);
+        List<CreditLog> logs = creditLogMapper.selectList(
+                new LambdaQueryWrapper<CreditLog>().eq(CreditLog::getUserId, userId)
+        );
+        for (CreditLog log : logs) {
+            creditScore += log.getChangeValue();
         }
 
         // 限制0-100
@@ -64,6 +68,36 @@ public class CreditServiceImpl implements CreditService {
         for (User user : users) {
             recalculateUserCredit(user.getId());
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int recordPenalty(Long userId, int changeValue, String reason, String bizType, Long bizId) {
+        // 写台账
+        CreditLog log = new CreditLog();
+        log.setUserId(userId);
+        log.setChangeValue(changeValue);
+        log.setReason(reason);
+        log.setBizType(bizType);
+        log.setBizId(bizId);
+        creditLogMapper.insert(log);
+
+        // 立即重算（惩罚实时生效，且与每日重算结果一致）
+        recalculateUserCredit(userId);
+        User user = userMapper.selectById(userId);
+        return user == null ? CreditConstant.INITIAL_SCORE : user.getCreditScore();
+    }
+
+    @Override
+    public int getReviewImpact(Long userId) {
+        List<Review> reviews = reviewMapper.selectList(
+                new LambdaQueryWrapper<Review>().eq(Review::getTargetUserId, userId)
+        );
+        int impact = 0;
+        for (Review review : reviews) {
+            impact += calculateReviewImpact(review);
+        }
+        return impact;
     }
 
     @Override

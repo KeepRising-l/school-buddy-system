@@ -201,7 +201,8 @@ public class UserServiceImpl implements UserService {
         User user = matchedUsers.isEmpty() ? null : matchedUsers.get(0);
         if (user == null) {
             incrementLoginFail(lockKey);
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+            // V1.2 安全：统一文案，避免通过报错差异枚举账号是否存在
+            throw new BusinessException("账号或密码错误");
         }
 
         // 校验用户是否被封禁
@@ -212,7 +213,8 @@ public class UserServiceImpl implements UserService {
         // BCrypt校验密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             incrementLoginFail(lockKey);
-            throw new BusinessException(ResultCode.PASSWORD_ERROR);
+            // V1.2 安全：统一文案，避免枚举账号
+            throw new BusinessException("账号或密码错误");
         }
 
         // 登录成功，清除失败计数
@@ -228,11 +230,14 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 增加登录失败计数（Redis不可用时静默跳过）
+     * V1.2 修复：每次失败都续期锁定时间（从最后一次失败起算），
+     * 防止攻击者只失败4次就把账号锁定30分钟（原逻辑 TTL 从第一次失败起算）
      */
     private void incrementLoginFail(String lockKey) {
         try {
             Long count = redisTemplate.opsForValue().increment(lockKey);
-            if (count != null && count == 1) {
+            if (count != null) {
+                // 每次失败都续期，锁定时间从最后一次失败起算
                 redisTemplate.expire(lockKey, LOCK_MINUTES, TimeUnit.MINUTES);
             }
         } catch (Exception e) {

@@ -20,6 +20,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     /**
      * 注册 JWT 拦截器，排除登录注册等公开接口
+     * V1.2：广场/详情不再整体排除——拦截器改为"可选登录"，游客放行、带 Token 时解析身份
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -27,8 +28,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(
                         "/api/auth/**",
-                        "/api/square/list",
-                        "/api/post/detail/**",
                         "/api/post/comments/**",
                         "/api/review/list/**",
                         "/api/review/user/**",

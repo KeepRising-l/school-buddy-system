@@ -190,7 +190,9 @@ public class ReportServiceImpl implements ReportService {
                 }
             }
 
-            // 自动风控：同一对象累计3次有效举报（REP-05）
+            // 自动风控（V1.2 落地）：同一对象累计3次有效举报（REP-05）触发兜底处置。
+            // 单次有效举报已即时下架/封禁，此处对"多次违规"对象追加风控确认：
+            // 若对象仍存活（例如此前举报的是另一维度/对象被恢复）则再次处置并追加警告通知
             Long validCount = reportMapper.selectCount(
                     new LambdaQueryWrapper<Report>()
                             .eq(Report::getTargetType, report.getTargetType())
@@ -199,6 +201,26 @@ public class ReportServiceImpl implements ReportService {
             );
             if (validCount >= AUTO_BAN_THRESHOLD) {
                 log.warn("自动风控触发：对象 {}-{} 有效举报已达 {} 次", report.getTargetType(), report.getTargetId(), validCount);
+                if (Report.TARGET_POST.equals(report.getTargetType())) {
+                    Post targetPost = postMapper.selectById(report.getTargetId());
+                    if (targetPost != null && !PostStatus.CANCELLED.equals(targetPost.getStatus())) {
+                        adminService.takedownPost(targetPost.getId());
+                        notificationService.send(targetPost.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
+                                "多次违规，组局已被下架",
+                                "你的组局「" + targetPost.getTitle() + "」因多次被举报核实违规，已被系统自动下架",
+                                "/post/" + targetPost.getId(), targetPost.getId());
+                    }
+                } else {
+                    User targetUser = userMapper.selectById(report.getTargetId());
+                    if (targetUser != null && targetUser.getStatus() == 1) {
+                        targetUser.setStatus(0);
+                        userMapper.updateById(targetUser);
+                        notificationService.send(targetUser.getId(), Notification.TYPE_SYSTEM,
+                                "多次违规，账号已被封禁",
+                                "你的账号因多次违规行为已被系统自动封禁，如有疑问请联系管理员",
+                                null, null);
+                    }
+                }
             }
         }
 

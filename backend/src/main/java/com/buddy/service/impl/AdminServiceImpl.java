@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buddy.common.constant.ApplyStatus;
+import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
@@ -49,6 +50,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Autowired
     private FavoriteMapper favoriteMapper;
+
+    @Autowired
+    private CreditLogMapper creditLogMapper;
 
     @Autowired
     private CreditService creditService;
@@ -202,8 +206,13 @@ public class AdminServiceImpl implements AdminService {
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        user.setCreditScore(creditScore);
-        userMapper.updateById(user);
+        // V1.2 信誉分台账：清空旧台账，按目标值换算成一条 ADMIN_RESET 记录，
+        // 重算公式 = 100 + Σ评价 + Σ台账 = 目标值，且不会被每日重算冲掉
+        creditLogMapper.delete(
+                new LambdaQueryWrapper<CreditLog>().eq(CreditLog::getUserId, userId)
+        );
+        int change = creditScore - CreditConstant.INITIAL_SCORE - creditService.getReviewImpact(userId);
+        creditService.recordPenalty(userId, change, CreditLog.REASON_ADMIN_RESET, CreditLog.BIZ_TYPE_ADMIN, userId);
     }
 
     @Override
