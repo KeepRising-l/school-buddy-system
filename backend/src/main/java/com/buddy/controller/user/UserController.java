@@ -6,6 +6,7 @@ import com.buddy.common.result.R;
 import com.buddy.dto.request.ProfileUpdateRequest;
 import com.buddy.dto.response.ApplyVO;
 import com.buddy.dto.response.PostVO;
+import com.buddy.dto.response.UserProfileVO;
 import com.buddy.dto.response.UserTagVO;
 import com.buddy.dto.response.UserVO;
 import com.buddy.service.UserService;
@@ -91,5 +92,25 @@ public class UserController {
             @RequestParam(required = false) String status) {
         Long userId = UserContext.getUserId();
         return R.ok(userService.getMyApplies(userId, page, size, status));
+    }
+
+    /**
+     * 个人主页（V1.1）：查看任意用户主页聚合信息
+     */
+    @GetMapping("/profile/{userId}")
+    public R<UserProfileVO> getUserProfile(@PathVariable Long userId) {
+        return R.ok(userService.getUserProfile(userId));
+    }
+
+    /**
+     * 设置主页隐私（V1.1）
+     * body: {privacy: 0/1}
+     */
+    @PutMapping("/privacy")
+    public R<Void> setProfilePrivacy(@RequestBody Map<String, Object> body) {
+        Long userId = UserContext.getUserId();
+        Integer privacy = Integer.valueOf(body.get("privacy").toString());
+        userService.setProfilePrivacy(userId, privacy);
+        return R.ok();
     }
 }

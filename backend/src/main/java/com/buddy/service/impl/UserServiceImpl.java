@@ -16,16 +16,20 @@ import com.buddy.dto.request.ProfileUpdateRequest;
 import com.buddy.dto.request.RegisterRequest;
 import com.buddy.dto.response.ApplyVO;
 import com.buddy.dto.response.PostVO;
+import com.buddy.dto.response.ReviewVO;
+import com.buddy.dto.response.UserProfileVO;
 import com.buddy.dto.response.UserTagVO;
 import com.buddy.dto.response.UserVO;
 import com.buddy.entity.InterestTag;
 import com.buddy.entity.Post;
 import com.buddy.entity.PostApply;
+import com.buddy.entity.Review;
 import com.buddy.entity.User;
 import com.buddy.entity.UserTag;
 import com.buddy.mapper.InterestTagMapper;
 import com.buddy.mapper.PostApplyMapper;
 import com.buddy.mapper.PostMapper;
+import com.buddy.mapper.ReviewMapper;
 import com.buddy.mapper.UserMapper;
 import com.buddy.mapper.UserTagMapper;
 import com.buddy.service.CreditService;
@@ -55,6 +59,9 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private UserTagMapper userTagMapper;
+
+    @Autowired
+    private ReviewMapper reviewMapper;
 
     @Autowired
     private InterestTagMapper interestTagMapper;
@@ -403,6 +410,113 @@ public class UserServiceImpl implements UserService {
             vo.setPublisherNickname(publisher.getNickname());
             vo.setPublisherAvatar(publisher.getAvatar());
             vo.setPublisherCreditLevel(creditService.getCreditLevel(publisher.getCreditScore()));
+        }
+        return vo;
+    }
+
+    @Override
+    public UserProfileVO getUserProfile(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+
+        UserProfileVO vo = new UserProfileVO();
+        // 基本信息（不含手机号/学号，敏感信息脱敏 PRO-02）
+        vo.setId(user.getId());
+        vo.setNickname(user.getNickname());
+        vo.setAvatar(user.getAvatar());
+        vo.setSignature(user.getSignature());
+        vo.setCollege(user.getCollege());
+        vo.setGender(user.getGender());
+        vo.setCreditScore(user.getCreditScore());
+        vo.setCreditLevel(creditService.getCreditLevel(user.getCreditScore()));
+        vo.setCreditLabel(creditService.getCreditLabel(user.getCreditScore()));
+        vo.setIsLowCredit(creditService.isLowCredit(user.getCreditScore()));
+        vo.setProfilePrivacy(user.getProfilePrivacy() == null ? 0 : user.getProfilePrivacy());
+
+        // 兴趣标签（含段位）
+        vo.setTags(getUserTags(userId));
+
+        // 评价标签云统计
+        List<Review> reviews = reviewMapper.selectList(
+                new LambdaQueryWrapper<Review>().eq(Review::getTargetUserId, userId)
+        );
+        Map<String, Long> tagCounts = reviews.stream()
+                .filter(r -> r.getTag() != null && !r.getTag().isEmpty())
+                .map(r -> r.getTag().split(",")[0].trim())
+                .collect(Collectors.groupingBy(t -> t, Collectors.counting()));
+        List<UserProfileVO.TagStat> tagStats = tagCounts.entrySet().stream()
+                .map(e -> {
+                    UserProfileVO.TagStat stat = new UserProfileVO.TagStat();
+                    stat.setTag(e.getKey());
+                    stat.setCount(e.getValue());
+                    return stat;
+                })
+                .collect(Collectors.toList());
+        vo.setReviewTagStats(tagStats);
+
+        // 历史组局（发布 + 参加，最多20条；隐私隐藏时不返回 PRO-03）
+        if (vo.getProfilePrivacy() != 1) {
+            List<PostVO> historyPosts = new ArrayList<>();
+            List<Post> published = postMapper.selectList(
+                    new LambdaQueryWrapper<Post>()
+                            .eq(Post::getPublisherId, userId)
+                            .orderByDesc(Post::getCreatedTime)
+                            .last("LIMIT 20")
+            );
+            historyPosts.addAll(published.stream().map(this::convertToPostVO).collect(Collectors.toList()));
+            vo.setHistoryPosts(historyPosts);
+        }
+
+        // 收到的评价（最多10条）
+        List<ReviewVO> reviewVOs = reviews.stream()
+                .sorted((a, b) -> b.getCreatedTime().compareTo(a.getCreatedTime()))
+                .limit(10)
+                .map(this::convertToReviewVO)
+                .collect(Collectors.toList());
+        vo.setRecentReviews(reviewVOs);
+
+        return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setProfilePrivacy(Long userId, Integer privacy) {
+        if (privacy == null || (privacy != 0 && privacy != 1)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "隐私设置不合法");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        user.setProfilePrivacy(privacy);
+        userMapper.updateById(user);
+    }
+
+    /**
+     * 评价实体转VO
+     */
+    private ReviewVO convertToReviewVO(Review review) {
+        ReviewVO vo = new ReviewVO();
+        vo.setId(review.getId());
+        vo.setPostId(review.getPostId());
+        vo.setReviewerId(review.getReviewerId());
+        vo.setTargetUserId(review.getTargetUserId());
+        vo.setRating(review.getRating());
+        vo.setTag(review.getTag());
+        vo.setContent(review.getContent());
+        vo.setCreatedTime(review.getCreatedTime());
+
+        // 评价人昵称
+        User reviewer = userMapper.selectById(review.getReviewerId());
+        if (reviewer != null) {
+            vo.setReviewerNickname(reviewer.getNickname());
+        }
+        // 帖子标题
+        Post post = postMapper.selectById(review.getPostId());
+        if (post != null) {
+            vo.setPostTitle(post.getTitle());
         }
         return vo;
     }

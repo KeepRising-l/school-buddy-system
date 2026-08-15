@@ -6,6 +6,7 @@ import com.buddy.dto.request.ProfileUpdateRequest;
 import com.buddy.dto.request.RegisterRequest;
 import com.buddy.dto.response.ApplyVO;
 import com.buddy.dto.response.PostVO;
+import com.buddy.dto.response.UserProfileVO;
 import com.buddy.dto.response.UserVO;
 import com.buddy.dto.response.UserTagVO;
 import com.buddy.entity.InterestTag;
@@ -56,4 +57,14 @@ public interface UserService {
      * 获取我的报名记录
      */
     IPage<ApplyVO> getMyApplies(Long userId, int page, int size, String status);
+
+    /**
+     * 获取个人主页聚合信息（V1.1）
+     */
+    UserProfileVO getUserProfile(Long userId);
+
+    /**
+     * 设置主页隐私（V1.1）：0公开 1隐藏历史组局
+     */
+    void setProfilePrivacy(Long userId, Integer privacy);
 }

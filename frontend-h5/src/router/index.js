@@ -78,6 +78,12 @@ const routes = [
     meta: { title: '消息中心', requireAuth: true }
   },
   {
+    path: '/user/:userId',
+    name: 'UserProfile',
+    component: () => import('@/views/user/UserProfile.vue'),
+    meta: { title: '个人主页' }
+  },
+  {
     path: '/review/:postId',
     name: 'ReviewPage',
     component: () => import('@/views/review/ReviewPage.vue'),

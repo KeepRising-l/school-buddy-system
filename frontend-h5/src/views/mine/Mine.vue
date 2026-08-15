@@ -51,6 +51,7 @@
               <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
             </template>
           </van-cell>
+          <van-cell title="我的主页" is-link :to="`/user/${userStore.userInfo.id}`" icon="contact-o" />
           <van-cell title="个人资料" is-link to="/mine/profile" icon="user-o" />
           <van-cell title="兴趣标签" is-link to="/mine/tags" icon="label-o" />
           <van-cell title="我的发布" is-link to="/mine/posts" icon="notes-o" />

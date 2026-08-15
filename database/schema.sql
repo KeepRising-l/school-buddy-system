@@ -22,6 +22,7 @@ CREATE TABLE `sys_user` (
     `status`       TINYINT       DEFAULT 1                  COMMENT '状态 1正常 0封禁',
     `username`     VARCHAR(64)   DEFAULT NULL               COMMENT '用户名（唯一，登录用）',
     `is_admin`     TINYINT       DEFAULT 0                  COMMENT '是否管理员 0否 1是',
+    `profile_privacy` TINYINT    DEFAULT 0                  COMMENT '主页隐私 0公开 1隐藏历史组局（V1.1）',
     `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `updated_time` DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),

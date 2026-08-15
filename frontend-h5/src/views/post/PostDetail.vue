@@ -560,9 +560,11 @@ const goReview = () => {
   router.push(`/review/${postId}`)
 }
 
-// 跳转发布者主页（暂无主页，可扩展）
+// 跳转发布者个人主页（V1.1）
 const goPublisherProfile = () => {
-  // 预留：跳转用户主页
+  if (post.value?.publisherId) {
+    router.push(`/user/${post.value.publisherId}`)
+  }
 }
 
 onMounted(() => {

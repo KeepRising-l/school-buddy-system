@@ -9,3 +9,6 @@ export const getMyApplies = (params) => request.get('/api/user/applies', { param
 export const uploadAvatar = (formData) => request.post('/api/file/upload', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 })
+// 个人主页（V1.1）
+export const getUserProfile = (userId) => request.get(`/api/user/profile/${userId}`)
+export const setProfilePrivacy = (privacy) => request.put('/api/user/privacy', { privacy })

@@ -32,6 +32,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/post/comments/**",
                         "/api/review/list/**",
                         "/api/review/user/**",
+                        "/api/user/profile/*",
                         "/api/admin/tag/list"
                 );
     }

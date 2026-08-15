@@ -52,6 +52,9 @@ public class User extends Model<User> {
     /** 是否管理员：0否 1是 */
     private Integer isAdmin;
 
+    /** 主页隐私：0公开 1隐藏历史组局（V1.1） */
+    private Integer profilePrivacy;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
