@@ -12,6 +12,8 @@
     <div class="post-tags" v-if="post.category">
       <van-tag type="primary" plain size="medium" round>{{ post.category }}</van-tag>
       <van-tag v-if="post.tagName" plain size="medium" round>{{ post.tagName }}</van-tag>
+      <!-- 段位要求徽章：提前告知门槛，避免点进详情才发现不达标 -->
+      <van-tag v-if="requireLevelText" type="warning" plain size="medium" round>{{ requireLevelText }}</van-tag>
     </div>
 
     <!-- 信息行 -->
@@ -64,6 +66,12 @@ const statusMap = {
 
 const statusText = computed(() => statusMap[props.post.status]?.text || '未知')
 const statusType = computed(() => statusMap[props.post.status]?.type || 'default')
+
+// 段位要求徽章文本（1-4 为"XX以上"，5 王者为最高档）
+const requireLevelText = computed(() => {
+  const map = { 1: '要求青铜以上', 2: '要求白银以上', 3: '要求黄金以上', 4: '要求钻石以上', 5: '要求王者' }
+  return map[props.post.requireLevel] || ''
+})
 
 const peoplePercent = computed(() => {
   if (!props.post.maxPeople) return 0

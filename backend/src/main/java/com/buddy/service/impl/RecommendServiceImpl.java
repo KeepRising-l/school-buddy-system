@@ -69,7 +69,9 @@ public class RecommendServiceImpl implements RecommendService {
     @Override
     public IPage<PostVO> getRecommendList(Long userId, int page, int size, String category, String sort, String timeRange, String keyword) {
         // 如果sort为latest或hot，走普通排序逻辑
-        if ("latest".equals(sort) || "hot".equals(sort)) {
+        // 兼容前端 newest/hottest 与后端 latest/hot 两种取值（前端传 newest/hottest）
+        if ("latest".equals(sort) || "newest".equals(sort)
+                || "hot".equals(sort) || "hottest".equals(sort)) {
             return getSortedList(page, size, category, sort, timeRange, keyword);
         }
 
@@ -180,12 +182,20 @@ public class RecommendServiceImpl implements RecommendService {
             return 0;
         }
 
-        // 解析帖子标签ID
-        Set<Long> postTagIdSet = Arrays.stream(post.getTagIds().split(","))
-                .map(String::trim)
-                .filter(StrUtil::isNotBlank)
-                .map(Long::parseLong)
-                .collect(Collectors.toSet());
+        // 解析帖子标签ID（修复：脏数据如 "abc"、"1,2,x" 会导致 NumberFormatException，
+        // 一条坏帖子就让整个广场 500；与其它 VO 转换一致，这里逐项容错跳过）
+        Set<Long> postTagIdSet = new HashSet<>();
+        for (String idStr : post.getTagIds().split(",")) {
+            String trimmed = idStr.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                postTagIdSet.add(Long.parseLong(trimmed));
+            } catch (NumberFormatException ignored) {
+                // 跳过非法标签ID
+            }
+        }
 
         if (postTagIdSet.isEmpty()) {
             return 0;
@@ -242,7 +252,8 @@ public class RecommendServiceImpl implements RecommendService {
         applyTimeRangeFilter(wrapper, timeRange);
 
         // 热度 = 报名人数（PRD SQ-04）
-        if ("hot".equals(sort)) {
+        // 兼容前端 hottest 与后端 hot 两种取值
+        if ("hot".equals(sort) || "hottest".equals(sort)) {
             wrapper.orderByDesc(Post::getCurrentPeople);
         } else {
             wrapper.orderByDesc(Post::getCreatedTime);
@@ -277,6 +288,8 @@ public class RecommendServiceImpl implements RecommendService {
         vo.setCreatedTime(post.getCreatedTime());
         vo.setDescription(post.getDescription());
         vo.setIsAuditPass(post.getIsAuditPass());
+        vo.setRequireLevel(post.getRequireLevel());
+        vo.setRequireGender(post.getRequireGender());
 
         // 根据tagIds查询标签名称
         if (StrUtil.isNotBlank(post.getTagIds())) {

@@ -1,6 +1,7 @@
 package com.buddy.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.buddy.common.constant.LevelTagCategories;
 import com.buddy.entity.InterestTag;
 import com.buddy.mapper.InterestTagMapper;
 import com.buddy.service.TagService;
@@ -20,21 +21,37 @@ public class TagServiceImpl implements TagService {
 
     @Override
     public List<InterestTag> getAllTags() {
-        return interestTagMapper.selectList(
+        List<InterestTag> tags = interestTagMapper.selectList(
                 new LambdaQueryWrapper<InterestTag>()
                         .eq(InterestTag::getStatus, 1)
                         .orderByAsc(InterestTag::getSortOrder)
         );
+        fillHasLevel(tags);
+        return tags;
     }
 
     @Override
     public List<InterestTag> getTagsByCategory(String category) {
-        return interestTagMapper.selectList(
+        List<InterestTag> tags = interestTagMapper.selectList(
                 new LambdaQueryWrapper<InterestTag>()
                         .eq(InterestTag::getCategory, category)
                         .eq(InterestTag::getStatus, 1)
                         .orderByAsc(InterestTag::getSortOrder)
         );
+        fillHasLevel(tags);
+        return tags;
+    }
+
+    /**
+     * 根据分类填充 hasLevel（是否有段位体系）
+     */
+    private void fillHasLevel(List<InterestTag> tags) {
+        if (tags == null) {
+            return;
+        }
+        for (InterestTag tag : tags) {
+            tag.setHasLevel(LevelTagCategories.contains(tag.getCategory()));
+        }
     }
 
     @Override

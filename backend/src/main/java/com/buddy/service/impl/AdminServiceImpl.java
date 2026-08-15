@@ -47,6 +47,9 @@ public class AdminServiceImpl implements AdminService {
     private ReviewMapper reviewMapper;
 
     @Autowired
+    private FavoriteMapper favoriteMapper;
+
+    @Autowired
     private CreditService creditService;
 
     @Autowired
@@ -223,6 +226,18 @@ public class AdminServiceImpl implements AdminService {
         // 下架即将帖子状态设为CANCELLED
         post.setStatus(PostStatus.CANCELLED);
         postMapper.updateById(post);
+
+        // 联动：取消该帖所有未完结报名（修复：否则报名记录悬挂"已通过"，用户卡死）
+        List<PostApply> applies = postApplyMapper.selectList(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
+        );
+        for (PostApply apply : applies) {
+            apply.setStatus(ApplyStatus.CANCELLED);
+            apply.setHandleTime(LocalDateTime.now());
+            postApplyMapper.updateById(apply);
+        }
     }
 
     @Override
@@ -255,6 +270,8 @@ public class AdminServiceImpl implements AdminService {
         postApplyMapper.delete(new LambdaQueryWrapper<PostApply>().eq(PostApply::getPostId, postId));
         postCommentMapper.delete(new LambdaQueryWrapper<PostComment>().eq(PostComment::getPostId, postId));
         reviewMapper.delete(new LambdaQueryWrapper<Review>().eq(Review::getPostId, postId));
+        // 修复：级联删除收藏记录，避免收藏列表出现幽灵数据/分页错乱
+        favoriteMapper.delete(new LambdaQueryWrapper<Favorite>().eq(Favorite::getPostId, postId));
         postMapper.deleteById(postId);
     }
 
@@ -298,6 +315,8 @@ public class AdminServiceImpl implements AdminService {
         vo.setPublisherId(post.getPublisherId());
         vo.setCreatedTime(post.getCreatedTime());
         vo.setIsAuditPass(post.getIsAuditPass());
+        vo.setRequireLevel(post.getRequireLevel());
+        vo.setRequireGender(post.getRequireGender());
 
         // 查询发布者信息
         User publisher = userMapper.selectById(post.getPublisherId());

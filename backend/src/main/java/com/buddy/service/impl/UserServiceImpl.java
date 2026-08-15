@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.CreditConstant;
+import com.buddy.common.constant.LevelTagCategories;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.jwt.JwtUtils;
@@ -141,10 +142,20 @@ public class UserServiceImpl implements UserService {
 
         // 构建用户实体
         User user = new User();
-        user.setStudentNo(request.getStudentNo());
+        // 修复：手机号注册不填学号时，student_no NOT NULL 约束导致 500。
+        // 生成唯一占位学号（前缀 P + 时间戳），保证入库成功且可登录
+        String studentNo = request.getStudentNo();
+        String username;
+        if (StrUtil.isBlank(studentNo)) {
+            studentNo = "P" + System.currentTimeMillis();
+            username = "P" + System.currentTimeMillis();
+        } else {
+            username = studentNo;
+        }
+        user.setStudentNo(studentNo);
         user.setPhone(request.getPhone());
         // 默认用户名 = 学号（注册后可在个人中心修改）
-        user.setUsername(request.getStudentNo());
+        user.setUsername(username);
         // BCrypt加密密码
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNickname(request.getRealName());
@@ -284,7 +295,10 @@ public class UserServiceImpl implements UserService {
             vo.setName(tag.getName());
             vo.setDescription(tag.getDescription());
             vo.setSortOrder(tag.getSortOrder());
-            vo.setSelfLevel(levelMap.getOrDefault(tag.getId(), 1));
+            // 无段位概念的项目 selfLevel 置 0，避免前端误显示"青铜"默认值
+            boolean hasLevel = LevelTagCategories.contains(tag.getCategory());
+            vo.setHasLevel(hasLevel);
+            vo.setSelfLevel(hasLevel ? levelMap.getOrDefault(tag.getId(), 1) : 0);
             return vo;
         }).collect(Collectors.toList());
     }
@@ -404,6 +418,8 @@ public class UserServiceImpl implements UserService {
         vo.setPublisherId(post.getPublisherId());
         vo.setCreatedTime(post.getCreatedTime());
         vo.setIsAuditPass(post.getIsAuditPass());
+        vo.setRequireLevel(post.getRequireLevel());
+        vo.setRequireGender(post.getRequireGender());
 
         // 查询发布者信息
         User publisher = userMapper.selectById(post.getPublisherId());

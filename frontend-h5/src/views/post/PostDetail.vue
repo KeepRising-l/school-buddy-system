@@ -129,6 +129,13 @@
 
       <!-- 操作按钮 -->
       <div class="action-buttons">
+        <!-- 报名资格预检提示：提前告知不达标原因，避免报名失败挫败感 -->
+        <div v-if="applyBlockReason" class="apply-block-tip" @click="goFixBlock">
+          <van-icon name="warning-o" class="tip-icon" />
+          <span class="tip-text">{{ applyBlockReason }}</span>
+          <span v-if="blockAction" class="tip-action">{{ blockAction }} ›</span>
+        </div>
+
         <!-- 自己发布的帖子 -->
         <template v-if="isOwner">
           <van-button
@@ -189,9 +196,10 @@
               round
               block
               :loading="applyLoading"
+              :disabled="!!applyBlockReason"
               @click="handleWaitlistJoin"
             >
-              候补报名
+              {{ applyBlockReason ? '暂不符合候补条件' : '候补报名' }}
             </van-button>
           </template>
           <!-- 进行中/已取消（不可报名） -->
@@ -210,9 +218,10 @@
             round
             block
             :loading="applyLoading"
+            :disabled="!!applyBlockReason"
             @click="handleApplyJoin"
           >
-            报名参加
+            {{ applyBlockReason ? '暂不符合报名条件' : '报名参加' }}
           </van-button>
         </template>
       </div>
@@ -265,6 +274,7 @@ import { getPostDetail, addComment, getComments } from '@/api/post'
 import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
 import { submitReport } from '@/api/report'
+import { getMyTags } from '@/api/user'
 import { useUserStore } from '@/store/user'
 import CreditStar from '@/components/CreditStar.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -337,6 +347,73 @@ const canMarkAttendance = computed(() => {
 const applyStatus = computed(() => {
   return post.value?.applyStatus || ''
 })
+
+// 我的兴趣标签（含段位），用于报名资格预检
+const myTags = ref([])
+
+/**
+ * 报名资格预检（V1.2）：
+ * 提前计算当前用户是否满足段位/性别/信誉要求，不满足时禁用报名按钮并给出原因，
+ * 避免用户点击报名后才知道失败。与后端 ApplyServiceImpl.validateQualification 规则保持一致。
+ */
+const applyBlockReason = computed(() => {
+  const p = post.value
+  if (!p) return ''
+  if (isOwner.value) return ''
+  if (applyStatus.value) return ''
+  // 仅招募中/已满员（可候补）时预检
+  if (p.status !== 'RECRUITING' && p.status !== 'FULL') return ''
+  if (!p.requireLevel || p.requireLevel === 0) return ''
+  if (!userStore.isLoggedIn) return ''
+  // 信誉分
+  const credit = userStore.userInfo?.creditScore ?? 100
+  if (credit < 60) return '你的信誉分不足60，无法报名该组局'
+  // 性别
+  if (p.requireGender && p.requireGender !== 0 && userStore.userInfo?.gender !== p.requireGender) {
+    return `性别不满足要求（${requireGenderText.value}）`
+  }
+  // 段位：帖子任一相关标签上的用户最高段位需达到要求（与后端一致）
+  const tagIds = String(p.tagIds || '').split(',').map(Number).filter(Boolean)
+  if (!tagIds.length) return '该组局未设置项目标签，无法校验段位'
+  const myLevel = myTags.value
+    .filter(t => tagIds.includes(Number(t.id)))
+    .reduce((max, t) => Math.max(max, Number(t.selfLevel) || 0), 0)
+  if (myLevel < p.requireLevel) {
+    return `段位不满足：该组局要求${requireLevelText.value}，你当前${myLevel ? '最高' + levelText(myLevel) : '未设置相关项目段位'}`
+  }
+  return ''
+})
+
+// 预检提示条的操作按钮文案（按原因给出直达入口）
+const blockAction = computed(() => {
+  const reason = applyBlockReason.value
+  if (!reason) return ''
+  if (reason.includes('段位')) return '去设置段位'
+  if (reason.includes('性别')) return '去修改资料'
+  return ''
+})
+
+// 跳转解决预检问题的页面
+const goFixBlock = () => {
+  const reason = applyBlockReason.value
+  if (!reason) return
+  if (reason.includes('段位')) {
+    router.push({ path: '/mine/tags', query: { redirect: `/post/${postId}` } })
+  } else if (reason.includes('性别')) {
+    router.push({ path: '/mine/profile', query: { redirect: `/post/${postId}` } })
+  }
+}
+
+// 加载我的标签（预检用）
+const fetchMyTags = async () => {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await getMyTags()
+    myTags.value = res.data || []
+  } catch (err) {
+    // 静默处理，预检降级为不拦截
+  }
+}
 
 // 格式化时间
 // 举报帖子（V1.1）
@@ -473,7 +550,13 @@ const handleWaitlistJoin = async () => {
 // 取消报名
 const handleCancelApply = async () => {
   try {
-    await showConfirmDialog({ title: '提示', message: '确定要取消报名吗？' })
+    // 提示信誉影响：活动开始前1小时内取消将扣5信誉分
+    await showConfirmDialog({
+      title: '取消报名',
+      message: '确定要取消报名吗？活动开始前1小时内取消将扣除5信誉分。',
+      confirmButtonText: '确定取消',
+      cancelButtonText: '再想想'
+    })
     const applyId = post.value?.myApplyId
     if (applyId) {
       await cancelApply(applyId)
@@ -592,6 +675,7 @@ onMounted(() => {
   fetchDetail()
   fetchComments()
   fetchFavoriteStatus()
+  fetchMyTags()
 })
 </script>
 
@@ -826,6 +910,39 @@ onMounted(() => {
     .van-button--primary {
       border: none;
       box-shadow: 0 12px 24px -12px rgba(16, 163, 127, 0.4);
+    }
+  }
+
+  // 报名资格预检提示条（V1.2）
+  .apply-block-tip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+    background: #fff7e6;
+    border: 1px solid #ffe1a8;
+    cursor: pointer;
+
+    .tip-icon {
+      color: #f59e0b;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .tip-text {
+      flex: 1;
+      font-size: 12px;
+      color: #8a6d3b;
+      line-height: 1.5;
+    }
+
+    .tip-action {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      flex-shrink: 0;
     }
   }
 }

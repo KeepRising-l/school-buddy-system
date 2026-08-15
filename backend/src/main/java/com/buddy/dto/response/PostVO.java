@@ -50,6 +50,12 @@ public class PostVO {
     /** 标签名称（逗号分隔，用于列表展示） */
     private String tagName;
 
+    /** 要求最低段位，null/0不限（列表页徽章展示用） */
+    private Integer requireLevel;
+
+    /** 要求性别：0不限 1男 2女 */
+    private Integer requireGender;
+
     /** 审核状态：0待审核 1已通过 2已拒绝（V1.1 先审后发） */
     private Integer isAuditPass;
 

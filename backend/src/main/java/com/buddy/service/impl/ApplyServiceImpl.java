@@ -77,17 +77,56 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("不能报名自己发布的活动");
         }
 
-        // 校验未重复报名
-        Long applyCount = postApplyMapper.selectCount(
+        // 校验未重复报名（允许取消/被拒后重新报名：复用旧记录行，避免唯一键冲突）
+        PostApply existing = postApplyMapper.selectOne(
                 new LambdaQueryWrapper<PostApply>()
                         .eq(PostApply::getPostId, postId)
                         .eq(PostApply::getApplicantId, userId)
-                        .ne(PostApply::getStatus, ApplyStatus.CANCELLED)
+                        .last("LIMIT 1")
         );
-        if (applyCount > 0) {
+        if (existing != null
+                && !ApplyStatus.CANCELLED.equals(existing.getStatus())
+                && !ApplyStatus.REJECTED.equals(existing.getStatus())) {
             throw new BusinessException(ResultCode.APPLY_DUPLICATE);
         }
 
+        // 校验报名资格（信誉分+段位+性别），候补报名共用同一套规则
+        User applicant = validateQualification(userId, post);
+
+        // 插入或复用旧报名记录（修复：取消/被拒后再次报名撞唯一键 uk_post_applicant 报 500）
+        PostApply apply;
+        if (existing != null) {
+            apply = existing;
+            apply.setStatus(ApplyStatus.PENDING);
+            apply.setApplyTime(LocalDateTime.now());
+            apply.setHandleTime(null);
+            apply.setRemark(null);
+            postApplyMapper.updateById(apply);
+        } else {
+            apply = new PostApply();
+            apply.setPostId(postId);
+            apply.setApplicantId(userId);
+            apply.setStatus(ApplyStatus.PENDING);
+            apply.setApplyTime(LocalDateTime.now());
+            postApplyMapper.insert(apply);
+        }
+
+        // 通知发布者：有新的报名申请（V1.1 通知中心，与业务同一事务）
+        notificationService.send(post.getPublisherId(), Notification.TYPE_APPLY_NEW,
+                "新的报名申请",
+                applicant.getNickname() + " 报名了你的组局「" + post.getTitle() + "」",
+                "/post/" + postId, postId);
+    }
+
+    /**
+     * 校验报名资格：信誉分 + 段位 + 性别（报名与候补共用）
+     *
+     * <p>段位校验说明：不再只检查第一个标签，而是检查用户在帖子任一标签上的最高段位；
+     * 提示语说明具体原因（未设置标签 / 段位不足）。</p>
+     *
+     * @return 报名用户实体
+     */
+    private User validateQualification(Long userId, Post post) {
         // 校验信誉分
         User applicant = userMapper.selectById(userId);
         if (applicant == null) {
@@ -98,8 +137,6 @@ public class ApplyServiceImpl implements ApplyService {
         }
 
         // 校验段位要求（requireLevel为0表示不限）
-        // 修复：不再只检查第一个标签，而是检查用户在帖子任一标签上的最高段位；
-        // 提示语说明具体原因（未设置标签 / 段位不足）
         if (post.getRequireLevel() != null && post.getRequireLevel() > 0) {
             List<Long> tagIdList = parseTagIds(post.getTagIds());
             boolean levelQualified = false;
@@ -128,20 +165,7 @@ public class ApplyServiceImpl implements ApplyService {
             }
         }
 
-        // 插入报名记录
-        PostApply apply = new PostApply();
-        apply.setPostId(postId);
-        apply.setApplicantId(userId);
-        apply.setStatus(ApplyStatus.PENDING);
-        apply.setApplyTime(LocalDateTime.now());
-
-        postApplyMapper.insert(apply);
-
-        // 通知发布者：有新的报名申请（V1.1 通知中心，与业务同一事务）
-        notificationService.send(post.getPublisherId(), Notification.TYPE_APPLY_NEW,
-                "新的报名申请",
-                applicant.getNickname() + " 报名了你的组局「" + post.getTitle() + "」",
-                "/post/" + postId, postId);
+        return applicant;
     }
 
     /**
@@ -170,33 +194,39 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("不能报名自己发布的活动");
         }
 
-        // 校验未重复报名/候补
-        Long applyCount = postApplyMapper.selectCount(
+        // 校验未重复报名/候补（允许取消/被拒后重新候补，复用旧记录行避免唯一键冲突）
+        PostApply existing = postApplyMapper.selectOne(
                 new LambdaQueryWrapper<PostApply>()
                         .eq(PostApply::getPostId, post.getId())
                         .eq(PostApply::getApplicantId, userId)
-                        .ne(PostApply::getStatus, ApplyStatus.CANCELLED)
+                        .last("LIMIT 1")
         );
-        if (applyCount > 0) {
+        if (existing != null
+                && !ApplyStatus.CANCELLED.equals(existing.getStatus())
+                && !ApplyStatus.REJECTED.equals(existing.getStatus())) {
             throw new BusinessException(ResultCode.APPLY_DUPLICATE);
         }
 
-        // 校验信誉分
-        User applicant = userMapper.selectById(userId);
-        if (applicant == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
-        if (creditService.isLowCredit(applicant.getCreditScore())) {
-            throw new BusinessException(ResultCode.CREDIT_TOO_LOW);
-        }
+        // 校验报名资格（信誉分+段位+性别），与正常报名同一套规则，避免候补绕过门槛
+        validateQualification(userId, post);
 
-        // 插入候补记录
-        PostApply apply = new PostApply();
-        apply.setPostId(post.getId());
-        apply.setApplicantId(userId);
-        apply.setStatus(ApplyStatus.WAITLIST);
-        apply.setApplyTime(LocalDateTime.now());
-        postApplyMapper.insert(apply);
+        // 插入或复用旧记录（修复：取消/被拒后再次候补撞唯一键报 500）
+        PostApply apply;
+        if (existing != null) {
+            apply = existing;
+            apply.setStatus(ApplyStatus.WAITLIST);
+            apply.setApplyTime(LocalDateTime.now());
+            apply.setHandleTime(null);
+            apply.setRemark(null);
+            postApplyMapper.updateById(apply);
+        } else {
+            apply = new PostApply();
+            apply.setPostId(post.getId());
+            apply.setApplicantId(userId);
+            apply.setStatus(ApplyStatus.WAITLIST);
+            apply.setApplyTime(LocalDateTime.now());
+            postApplyMapper.insert(apply);
+        }
 
         // 查询候补位置
         Long position = postApplyMapper.selectCount(

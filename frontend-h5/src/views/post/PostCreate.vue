@@ -122,14 +122,15 @@
         </template>
       </van-field>
 
-      <!-- 段位要求 -->
+      <!-- 段位要求（仅适用段位体系的项目，如球类/电竞；晨跑/剧本杀等不适用） -->
       <van-field
         v-model="rankText"
         is-link
         readonly
         label="段位要求"
-        placeholder="请选择段位要求"
-        @click="showRankPicker = true"
+        :placeholder="selectedTagHasLevel ? '请选择段位要求' : '该项目不适用段位要求'"
+        :disabled="!selectedTagHasLevel"
+        @click="handleRankClick"
         class="form-field"
       />
       <van-popup v-model:show="showRankPicker" round position="bottom">
@@ -216,6 +217,8 @@ const showEndTimePicker = ref(false)
 
 // 当前选中的标签名称
 const selectedTagName = ref('')
+// 当前选中的项目是否有段位体系（后端按分类返回：球类/电竞有，桌游/跑步等没有）
+const selectedTagHasLevel = ref(true)
 
 // 临时存储日期选择结果
 const tempStartDate = ref('')
@@ -225,6 +228,7 @@ const tempEndDate = ref('')
 const categoryText = computed(() => form.category || '')
 const tagNamesText = computed(() => selectedTagName.value || '')
 const rankText = computed(() => {
+  if (!selectedTagHasLevel.value) return '不适用'
   const map = { 1: '青铜以上', 2: '白银以上', 3: '黄金以上', 4: '钻石以上', 5: '王者' }
   return map[form.requireLevel] || '不限'
 })
@@ -272,6 +276,7 @@ const onCategoryConfirm = ({ selectedOptions }) => {
   // 切换分类时重置项目选择
   form.tagIds = ''
   selectedTagName.value = ''
+  selectedTagHasLevel.value = true
   showCategoryPicker.value = false
 }
 
@@ -290,8 +295,23 @@ const onTagConfirm = ({ selectedOptions }) => {
   if (selected) {
     form.tagIds = String(selected.value)
     selectedTagName.value = selected.text
+    // 记录该项目是否有段位体系；无段位项目不显示段位要求
+    const tag = tagData.value.find(t => t.id === selected.value)
+    selectedTagHasLevel.value = tag ? tag.hasLevel !== false : true
+    if (!selectedTagHasLevel.value) {
+      form.requireLevel = null
+    }
   }
   showTagPicker.value = false
+}
+
+// 段位要求点击（无段位项目点击时提示原因）
+const handleRankClick = () => {
+  if (!selectedTagHasLevel.value) {
+    showToast('该项目不适用段位要求')
+    return
+  }
+  showRankPicker.value = true
 }
 
 // 段位确认
@@ -350,6 +370,10 @@ const validate = () => {
   }
   if (!form.category) {
     showToast('请选择兴趣分类')
+    return false
+  }
+  if (!form.tagIds) {
+    showToast('请选择具体项目')
     return false
   }
   if (!form.startTime) {
@@ -415,7 +439,8 @@ const handleSubmit = async () => {
       endTime: form.endTime,
       location: form.location,
       maxPeople: form.maxPeople,
-      requireLevel: form.requireLevel,
+      // 无段位体系的项目不提交段位要求（后端 requireLevel 为 null 表示不限）
+      requireLevel: selectedTagHasLevel.value ? form.requireLevel : null,
       requireGender: form.requireGender,
       description: form.description
     })

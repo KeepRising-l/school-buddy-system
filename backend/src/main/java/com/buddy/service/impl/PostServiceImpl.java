@@ -89,6 +89,28 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ResultCode.CREDIT_TOO_LOW);
         }
 
+        // 校验时间合法性（修复：不校验会导致帖子刚发布就被定时任务置为进行中/已结束）
+        if (request.getStartTime() == null || request.getEndTime() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "开始/结束时间不能为空");
+        }
+        if (!request.getStartTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "开始时间必须晚于当前时间");
+        }
+        if (!request.getEndTime().isAfter(request.getStartTime())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "结束时间必须晚于开始时间");
+        }
+        if (java.time.Duration.between(request.getStartTime(), request.getEndTime()).toHours() > 24) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "活动时长不能超过24小时");
+        }
+
+        // 校验段位/性别要求范围
+        if (request.getRequireLevel() != null && (request.getRequireLevel() < 1 || request.getRequireLevel() > 5)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "段位要求不合法（1-5）");
+        }
+        if (request.getRequireGender() != null && (request.getRequireGender() < 0 || request.getRequireGender() > 2)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "性别要求不合法（0-2）");
+        }
+
         // 校验同时进行中的帖子数量
         Long activeCount = postMapper.selectCount(
                 new LambdaQueryWrapper<Post>()
@@ -133,11 +155,11 @@ public class PostServiceImpl implements PostService {
         // 查询发布者信息
         User publisher = userMapper.selectById(post.getPublisherId());
 
-        // 查询已通过和待审核的报名用户列表
+        // 查询已通过报名的用户列表（修复：不再返回 PENDING 待审核用户，保护隐私且与人数一致）
         List<PostApply> applies = postApplyMapper.selectList(
                 new LambdaQueryWrapper<PostApply>()
                         .eq(PostApply::getPostId, postId)
-                        .in(PostApply::getStatus, ApplyStatus.APPROVED, ApplyStatus.PENDING)
+                        .eq(PostApply::getStatus, ApplyStatus.APPROVED)
         );
 
         // 组装报名用户信息
@@ -274,13 +296,18 @@ public class PostServiceImpl implements PostService {
         post.setStatus(PostStatus.CANCELLED);
         postMapper.updateById(post);
 
-        // 通知所有已报名用户：组局已取消（V1.1 通知中心）
+        // 联动：取消所有未完结的报名（PENDING/APPROVED/WAITLIST），
+        // 修复：否则报名记录悬挂"已通过"，用户无法取消也无法出勤，卡死
         List<PostApply> applies = postApplyMapper.selectList(
                 new LambdaQueryWrapper<PostApply>()
                         .eq(PostApply::getPostId, postId)
-                        .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED)
+                        .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
         );
         for (PostApply apply : applies) {
+            apply.setStatus(ApplyStatus.CANCELLED);
+            apply.setHandleTime(LocalDateTime.now());
+            postApplyMapper.updateById(apply);
+            // 通知该用户：组局已取消
             notificationService.send(apply.getApplicantId(), Notification.TYPE_POST_CANCEL,
                     "组局已取消",
                     "你参加的组局「" + post.getTitle() + "」已被取消",
@@ -332,6 +359,8 @@ public class PostServiceImpl implements PostService {
         vo.setCreatedTime(post.getCreatedTime());
         vo.setDescription(post.getDescription());
         vo.setIsAuditPass(post.getIsAuditPass());
+        vo.setRequireLevel(post.getRequireLevel());
+        vo.setRequireGender(post.getRequireGender());
 
         // 根据tagIds查询标签名称
         if (StrUtil.isNotBlank(post.getTagIds())) {

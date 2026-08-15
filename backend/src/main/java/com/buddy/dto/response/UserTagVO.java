@@ -12,5 +12,6 @@ public class UserTagVO {
     private String name;
     private String description;
     private Integer sortOrder;
-    private Integer selfLevel;  // 用户自评段位 1-5
+    private Integer selfLevel;  // 用户自评段位 1-5（无段位概念的项目为 0/null）
+    private Boolean hasLevel;   // 该项目是否有段位体系
 }
