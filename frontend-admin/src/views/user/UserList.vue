@@ -9,6 +9,7 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">搜索</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleExportUsers">导出</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -183,9 +184,10 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getUserList, banUser, unbanUser, resetCredit, getUserDetail, getUserPosts, getUserApplies, getUserReviews } from '@/api/admin'
+import { getUserList, banUser, unbanUser, resetCredit, getUserDetail, getUserPosts, getUserApplies, getUserReviews, exportUsers } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CreditStar from '@/components/CreditStar.vue'
+import { downloadFromBlob } from '@/utils/download'
 
 // 搜索表单
 const searchForm = reactive({ keyword: '' })
@@ -400,6 +402,17 @@ const loadDetailReviews = async () => {
     const data = res.data || {}
     detailReviews.value = data.records || []
     detailReviewPage.total = data.total || 0
+  } catch (e) {
+    // 错误已在拦截器中处理
+  }
+}
+
+// 导出用户列表
+const handleExportUsers = async () => {
+  try {
+    const res = await exportUsers()
+    downloadFromBlob(res, 'users.csv')
+    ElMessage.success('导出成功')
   } catch (e) {
     // 错误已在拦截器中处理
   }

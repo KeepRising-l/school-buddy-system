@@ -56,7 +56,7 @@ public class PostVO {
     /** 要求性别：0不限 1男 2女 */
     private Integer requireGender;
 
-    /** 审核状态：0待审核 1已通过 2已拒绝（V1.1 先审后发） */
+    /** 状态：1正常 2已下架（V1.3 先发后审，0废弃） */
     private Integer isAuditPass;
 
     private LocalDateTime createdTime;

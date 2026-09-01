@@ -222,6 +222,25 @@ CREATE TABLE `credit_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信誉分变动台账';
 
 -- -----------------------------------------------------
+-- 9. 系统公告表
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `sys_announcement`;
+CREATE TABLE `sys_announcement` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `title`         VARCHAR(128)  NOT NULL                   COMMENT '标题',
+    `content`       TEXT          NOT NULL                   COMMENT '内容',
+    `type`          TINYINT       NOT NULL DEFAULT 1         COMMENT '类型 1=公告 2=弹窗',
+    `status`        TINYINT       NOT NULL DEFAULT 0         COMMENT '状态 0=关闭 1=启用',
+    `publish_time`  DATETIME      DEFAULT NULL               COMMENT '发布时间',
+    `expire_time`   DATETIME      DEFAULT NULL               COMMENT '过期时间（NULL=永不过期）',
+    `created_by`    BIGINT        DEFAULT NULL               COMMENT '创建人（管理员ID）',
+    `created_time`  DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `updated_time`  DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_type_status` (`type`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统公告表';
+
+-- -----------------------------------------------------
 -- 初始数据：一个管理员 + 若干兴趣标签 + 测试学生
 -- 密码 123456 的 BCrypt: $2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka
 -- -----------------------------------------------------

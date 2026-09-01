@@ -68,6 +68,9 @@ public class PostServiceImpl implements PostService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private SensitiveWordService sensitiveWordService;
+
     /** 浏览量去重缓存前缀 */
     private static final String VIEW_COUNT_KEY = "post:view:";
 
@@ -87,6 +90,17 @@ public class PostServiceImpl implements PostService {
         }
         if (creditService.isLowCredit(user.getCreditScore())) {
             throw new BusinessException(ResultCode.CREDIT_TOO_LOW);
+        }
+
+        // 违禁词检测（先发后审第一道防线）
+        List<String> hitWords = sensitiveWordService.check(
+                request.getTitle(),
+                request.getDescription(),
+                request.getLocation()
+        );
+        if (!hitWords.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "内容包含违禁词：" + String.join("、", hitWords) + "，请修改后重新发布");
         }
 
         // 校验时间合法性（修复：不校验会导致帖子刚发布就被定时任务置为进行中/已结束）
@@ -138,8 +152,8 @@ public class PostServiceImpl implements PostService {
         post.setStatus(PostStatus.RECRUITING);
         post.setViewCount(0);
         post.setLikeCount(0);
-        // V1.1 先审后发：发布后默认待审核（0），审核通过后才在广场展示
-        post.setIsAuditPass(0);
+        // V1.3 先发后审：通过违禁词检测后直接发布（1），违规内容靠举报兜底
+        post.setIsAuditPass(1);
 
         postMapper.insert(post);
         return post.getId();
@@ -152,12 +166,12 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
         }
 
-        // V1.2 先审后发闭环：未过审（待审核/被拒）的帖子仅发布者可查看，他人视为不存在，
-        // 防止按 ID 遍历泄露未过审帖内容与报名者名单
-        if (post.getIsAuditPass() != null && post.getIsAuditPass() != 1) {
+        // V1.3 先发后审：被下架的帖子（is_audit_pass=2）仅发布者可查看，他人视为不存在
+        // 正常帖子 is_audit_pass=1，都能看到
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
             boolean isOwner = userId != null && post.getPublisherId().equals(userId);
             if (!isOwner) {
-                throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在或未通过审核");
+                throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
             }
         }
 

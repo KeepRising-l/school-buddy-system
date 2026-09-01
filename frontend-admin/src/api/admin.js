@@ -34,8 +34,23 @@ export const getActiveTrend = (params) => request.get('/api/admin/stats/active',
 export const getCategoryTop5 = () => request.get('/api/admin/stats/category')
 export const getCreditDistribution = () => request.get('/api/admin/stats/credit')
 export const getUserGrowthTrend = (params) => request.get('/api/admin/stats/user-growth', { params })
+export const getRetention = (params) => request.get('/api/admin/stats/retention', { params })
+export const getFunnel = (params) => request.get('/api/admin/stats/funnel', { params })
 
 // ===== 举报处理（V1.1）=====
 export const getReportList = (params) => request.get('/api/admin/report/list', { params })
 export const getReportDetail = (id) => request.get(`/api/admin/report/detail/${id}`)
 export const handleReport = (id, data) => request.post(`/api/admin/report/handle/${id}`, data)
+
+// ===== 系统公告 =====
+export const getAnnouncementList = (params) => request.get('/api/admin/announcement/list', { params })
+export const addAnnouncement = (data) => request.post('/api/admin/announcement/add', data)
+export const updateAnnouncement = (data) => request.put('/api/admin/announcement/update', data)
+export const publishAnnouncement = (id) => request.post(`/api/admin/announcement/publish/${id}`)
+export const closeAnnouncement = (id) => request.post(`/api/admin/announcement/close/${id}`)
+export const deleteAnnouncement = (id) => request.delete(`/api/admin/announcement/${id}`)
+
+// ===== 数据导出 =====
+export const exportUsers = () => request.get('/api/admin/stats/export/users', { responseType: 'blob' })
+export const exportPosts = () => request.get('/api/admin/stats/export/posts', { responseType: 'blob' })
+export const exportStats = (params) => request.get('/api/admin/stats/export/stats', { params, responseType: 'blob' })

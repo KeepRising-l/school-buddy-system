@@ -22,6 +22,10 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   response => {
+    // Blob 响应（文件下载）绕过 R<T> 包装
+    if (response.config.responseType === 'blob') {
+      return response
+    }
     const res = response.data
     if (!res) {
       ElMessage.error('服务器响应异常')

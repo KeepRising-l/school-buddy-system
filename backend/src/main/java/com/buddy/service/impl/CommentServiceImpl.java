@@ -36,6 +36,9 @@ public class CommentServiceImpl implements CommentService {
     @Autowired
     private PostMapper postMapper;
 
+    @Autowired
+    private SensitiveWordService sensitiveWordService;
+
     @Override
     public void addComment(Long userId, Long postId, String content) {
         // 校验评论内容非空且不超长（数据库限制500字符）
@@ -45,14 +48,20 @@ public class CommentServiceImpl implements CommentService {
         if (content.length() > 500) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "评论内容不能超过500字");
         }
+        // 违禁词检测
+        List<String> hitWords = sensitiveWordService.check(content);
+        if (!hitWords.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "评论包含违禁词：" + String.join("、", hitWords) + "，请修改后重新发布");
+        }
         // 校验帖子存在（防止孤儿评论）
         Post post = postMapper.selectById(postId);
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
         }
-        // V1.2 先审后发闭环：未过审/已取消的帖子不可评论
-        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "帖子未通过审核，暂不可评论");
+        // V1.3 先发后审：已下架/已取消的帖子不可评论
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "帖子已被下架，暂不可评论");
         }
         if (PostStatus.CANCELLED.equals(post.getStatus())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "该组局已取消，暂不可评论");

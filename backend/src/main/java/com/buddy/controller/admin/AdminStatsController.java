@@ -7,6 +7,9 @@ import com.buddy.service.StatsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.List;
 import java.util.Map;
 
@@ -85,5 +88,61 @@ public class AdminStatsController {
     public R<List<Map<String, Object>>> getUserGrowthTrend(
             @RequestParam(defaultValue = "30") int days) {
         return R.ok(statsService.getUserGrowthTrend(days));
+    }
+
+    /**
+     * 用户留存分析（次日/7日/30日留存率）
+     */
+    @RequireAdmin
+    @GetMapping("/retention")
+    public R<List<Map<String, Object>>> getRetention(
+            @RequestParam(defaultValue = "30") int days) {
+        return R.ok(statsService.getRetention(days));
+    }
+
+    /**
+     * 转化漏斗分析（浏览→报名→通过→出勤）
+     */
+    @RequireAdmin
+    @GetMapping("/funnel")
+    public R<List<Map<String, Object>>> getFunnel(
+            @RequestParam(defaultValue = "30") int days) {
+        return R.ok(statsService.getFunnel(days));
+    }
+
+    /**
+     * 导出用户列表（CSV）
+     */
+    @RequireAdmin
+    @GetMapping("/export/users")
+    public void exportUsers(HttpServletResponse response) throws IOException {
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename=users.csv");
+        statsService.exportUsers(new OutputStreamWriter(response.getOutputStream(), "UTF-8"));
+    }
+
+    /**
+     * 导出帖子列表（CSV）
+     */
+    @RequireAdmin
+    @GetMapping("/export/posts")
+    public void exportPosts(HttpServletResponse response) throws IOException {
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename=posts.csv");
+        statsService.exportPosts(new OutputStreamWriter(response.getOutputStream(), "UTF-8"));
+    }
+
+    /**
+     * 导出统计数据（CSV）- trend/retention/funnel
+     */
+    @RequireAdmin
+    @GetMapping("/export/stats")
+    public void exportStats(
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "trend") String type,
+            HttpServletResponse response) throws IOException {
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename=stats_" + type + ".csv");
+        statsService.exportStats(days, type, new OutputStreamWriter(response.getOutputStream(), "UTF-8"));
     }
 }

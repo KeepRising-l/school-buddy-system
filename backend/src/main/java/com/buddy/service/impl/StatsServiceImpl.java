@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.io.IOException;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -246,5 +248,266 @@ public class StatsServiceImpl implements StatsService {
         }
 
         return result;
+    }
+
+    @Override
+    public List<Map<String, Object>> getRetention(int days) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        LocalDate today = LocalDate.now();
+
+        // 遍历每一天作为"注册基准日"，计算该日新增用户的后续留存
+        // 注意：距离今天不足 N 天的日期不计算 N 日留存（数据不完整）
+        for (int i = days - 1; i >= 0; i--) {
+            LocalDate cohortDate = today.minusDays(i);
+            LocalDateTime cohortStart = LocalDateTime.of(cohortDate, LocalTime.MIN);
+            LocalDateTime cohortEnd = LocalDateTime.of(cohortDate, LocalTime.MAX);
+
+            // 当日新增用户数
+            Long newUsers = userMapper.selectCount(
+                    new LambdaQueryWrapper<User>()
+                            .ge(User::getCreatedTime, cohortStart)
+                            .le(User::getCreatedTime, cohortEnd)
+            );
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("date", cohortDate.toString());
+            item.put("newUsers", newUsers);
+
+            if (newUsers == 0) {
+                item.put("d1Rate", 0.0);
+                item.put("d7Rate", 0.0);
+                item.put("d30Rate", 0.0);
+                result.add(item);
+                continue;
+            }
+
+            // 取当日新增用户的 ID 列表
+            List<User> newUserList = userMapper.selectList(
+                    new LambdaQueryWrapper<User>()
+                            .select(User::getId)
+                            .ge(User::getCreatedTime, cohortStart)
+                            .le(User::getCreatedTime, cohortEnd)
+            );
+            List<Long> newUserIds = newUserList.stream()
+                    .map(User::getId)
+                    .collect(java.util.stream.Collectors.toList());
+
+            // 计算 D+1 留存：次日有发帖或报名行为
+            double d1Rate = i >= 1 ? calculateRetentionRate(newUserIds, cohortDate.plusDays(1)) : 0.0;
+            // 计算 D+7 留存：第7天有活跃行为
+            double d7Rate = i >= 7 ? calculateRetentionRate(newUserIds, cohortDate.plusDays(7)) : 0.0;
+            // 计算 D+30 留存
+            double d30Rate = i >= 30 ? calculateRetentionRate(newUserIds, cohortDate.plusDays(30)) : 0.0;
+
+            item.put("d1Rate", Math.round(d1Rate * 10) / 10.0);
+            item.put("d7Rate", Math.round(d7Rate * 10) / 10.0);
+            item.put("d30Rate", Math.round(d30Rate * 10) / 10.0);
+
+            result.add(item);
+        }
+
+        return result;
+    }
+
+    /**
+     * 计算一批用户在指定日期的留存率（活跃 = 当天发帖 or 报名）
+     */
+    private double calculateRetentionRate(List<Long> userIds, LocalDate activeDate) {
+        if (userIds == null || userIds.isEmpty()) return 0.0;
+
+        LocalDateTime dayStart = LocalDateTime.of(activeDate, LocalTime.MIN);
+        LocalDateTime dayEnd = LocalDateTime.of(activeDate, LocalTime.MAX);
+
+        // 当天发帖的用户数
+        Long postActiveCount = postMapper.selectCount(
+                new QueryWrapper<Post>()
+                        .in("publisher_id", userIds)
+                        .ge("created_time", dayStart)
+                        .le("created_time", dayEnd)
+                        .select("DISTINCT publisher_id")
+        );
+
+        // 当天报名的用户数
+        Long applyActiveCount = postApplyMapper.selectCount(
+                new QueryWrapper<PostApply>()
+                        .in("applicant_id", userIds)
+                        .ge("apply_time", dayStart)
+                        .le("apply_time", dayEnd)
+                        .select("DISTINCT applicant_id")
+        );
+
+        // 简单去重（两种行为都有的会被算两次），用 Set 合并才准确，但数据量小近似就行
+        // 为准确起见，这里用 set 合并
+        List<Post> activePosts = postMapper.selectList(
+                new QueryWrapper<Post>()
+                        .select("DISTINCT publisher_id")
+                        .in("publisher_id", userIds)
+                        .ge("created_time", dayStart)
+                        .le("created_time", dayEnd)
+        );
+        List<PostApply> activeApplies = postApplyMapper.selectList(
+                new QueryWrapper<PostApply>()
+                        .select("DISTINCT applicant_id")
+                        .in("applicant_id", userIds)
+                        .ge("apply_time", dayStart)
+                        .le("apply_time", dayEnd)
+        );
+
+        java.util.Set<Long> activeUsers = new java.util.HashSet<>();
+        for (Post p : activePosts) activeUsers.add(p.getPublisherId());
+        for (PostApply a : activeApplies) activeUsers.add(a.getApplicantId());
+
+        return (double) activeUsers.size() / userIds.size() * 100;
+    }
+
+    @Override
+    public List<Map<String, Object>> getFunnel(int days) {
+        LocalDateTime startTime = days > 0
+                ? LocalDateTime.now().minusDays(days)
+                : LocalDateTime.of(2000, 1, 1, 0, 0);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        // 阶段 1：浏览量（帖子 view_count 总和）
+        Long viewCount = 0L;
+        List<Post> posts = postMapper.selectList(
+                new LambdaQueryWrapper<Post>()
+                        .ge(Post::getCreatedTime, startTime)
+                        .select(Post::getViewCount)
+        );
+        for (Post p : posts) {
+            viewCount += p.getViewCount() != null ? p.getViewCount() : 0;
+        }
+
+        // 阶段 2：报名次数
+        Long applyCount = postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>()
+                        .ge(PostApply::getApplyTime, startTime)
+        );
+
+        // 阶段 3：报名通过数
+        Long approvedCount = postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>()
+                        .ge(PostApply::getApplyTime, startTime)
+                        .eq(PostApply::getStatus, ApplyStatus.APPROVED)
+        );
+
+        // 阶段 4：实际出勤数
+        Long attendedCount = postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>()
+                        .ge(PostApply::getApplyTime, startTime)
+                        .eq(PostApply::getStatus, ApplyStatus.ATTENDED)
+        );
+
+        long base = viewCount > 0 ? viewCount : 1;
+
+        result.add(buildFunnelItem("浏览", viewCount, 100.0));
+        result.add(buildFunnelItem("报名", applyCount,
+                Math.round((double) applyCount / base * 1000) / 10.0));
+        result.add(buildFunnelItem("通过", approvedCount,
+                Math.round((double) approvedCount / base * 1000) / 10.0));
+        result.add(buildFunnelItem("出勤", attendedCount,
+                Math.round((double) attendedCount / base * 1000) / 10.0));
+
+        return result;
+    }
+
+    /**
+     * 构建漏斗数据项
+     */
+    private Map<String, Object> buildFunnelItem(String stage, Long count, Double rate) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("stage", stage);
+        item.put("count", count);
+        item.put("rate", rate);
+        return item;
+    }
+
+    // ===== CSV 导出 =====
+
+    @Override
+    public void exportUsers(Writer writer) throws IOException {
+        // UTF-8 BOM，确保 Windows Excel 正确识别中文编码
+        writer.write("﻿");
+        writeCsvLine(writer, "ID", "学号", "昵称", "手机号", "学院", "信誉分", "状态", "注册时间");
+        List<User> users = userMapper.selectList(
+                new LambdaQueryWrapper<User>().orderByDesc(User::getCreatedTime)
+        );
+        for (User u : users) {
+            writeCsvLine(writer, u.getId(), u.getStudentNo(), u.getNickname(),
+                    u.getPhone(), u.getCollege(), u.getCreditScore(),
+                    u.getStatus() == 1 ? "正常" : "封禁", u.getCreatedTime());
+        }
+    }
+
+    @Override
+    public void exportPosts(Writer writer) throws IOException {
+        writer.write("﻿");
+        writeCsvLine(writer, "ID", "标题", "分类", "发布者ID", "状态", "浏览量", "人数", "创建时间");
+        List<Post> posts = postMapper.selectList(
+                new LambdaQueryWrapper<Post>().orderByDesc(Post::getCreatedTime)
+        );
+        for (Post p : posts) {
+            writeCsvLine(writer, p.getId(), p.getTitle(), p.getCategory(),
+                    p.getPublisherId(), p.getStatus(), p.getViewCount(),
+                    p.getCurrentPeople() + "/" + p.getMaxPeople(), p.getCreatedTime());
+        }
+    }
+
+    @Override
+    public void exportStats(int days, String type, Writer writer) throws IOException {
+        writer.write("﻿");
+        switch (type) {
+            case "retention":
+                writeCsvLine(writer, "日期", "新增用户", "次日留存%", "7日留存%", "30日留存%");
+                List<Map<String, Object>> retention = getRetention(days);
+                for (Map<String, Object> item : retention) {
+                    writeCsvLine(writer, item.get("date"), item.get("newUsers"),
+                            item.get("d1Rate"), item.get("d7Rate"), item.get("d30Rate"));
+                }
+                break;
+            case "funnel":
+                writeCsvLine(writer, "阶段", "数量", "转化率%");
+                List<Map<String, Object>> funnel = getFunnel(days);
+                for (Map<String, Object> item : funnel) {
+                    writeCsvLine(writer, item.get("stage"), item.get("count"), item.get("rate"));
+                }
+                break;
+            default: // "trend"
+                writeCsvLine(writer, "日期", "发帖量", "成功组局", "活跃用户", "累计用户");
+                List<Map<String, Object>> postTrend = getPostTrend(days);
+                List<Map<String, Object>> successTrend = getSuccessMatchTrend(days);
+                List<Map<String, Object>> activeTrend = getActiveUserTrend(days);
+                List<Map<String, Object>> userGrowth = getUserGrowthTrend(days);
+                for (int i = 0; i < postTrend.size(); i++) {
+                    writeCsvLine(writer, postTrend.get(i).get("date"),
+                            postTrend.get(i).get("count"),
+                            successTrend.get(i).get("count"),
+                            activeTrend.get(i).get("count"),
+                            userGrowth.get(i).get("count"));
+                }
+                break;
+        }
+    }
+
+    /**
+     * 写一行CSV（处理逗号、引号、换行转义）
+     */
+    private void writeCsvLine(Writer writer, Object... fields) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < fields.length; i++) {
+            if (i > 0) sb.append(',');
+            Object val = fields[i];
+            if (val != null) {
+                String str = val.toString();
+                if (str.contains(",") || str.contains("\"") || str.contains("\n")) {
+                    sb.append('"').append(str.replace("\"", "\"\"")).append('"');
+                } else {
+                    sb.append(str);
+                }
+            }
+        }
+        sb.append('\n');
+        writer.write(sb.toString());
     }
 }

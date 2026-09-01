@@ -281,7 +281,8 @@ public class AdminServiceImpl implements AdminService {
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
         }
-        // V1.1 先审后发三态：通过=1 / 拒绝=2
+        // V1.3 先发后审：保留审核接口作为兜底（1=正常 2=已下架）
+        // 一般通过下架/举报处理，此接口保留供特殊场景使用
         post.setIsAuditPass(pass ? 1 : 2);
         postMapper.updateById(post);
 

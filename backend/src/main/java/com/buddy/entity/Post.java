@@ -61,7 +61,7 @@ public class Post extends Model<Post> {
     /** 点赞数 */
     private Integer likeCount;
 
-    /** 审核是否通过：1通过 0待审 */
+    /** 1正常 2已下架（V1.3 先发后审，0废弃不用） */
     private Integer isAuditPass;
 
     @TableField(fill = FieldFill.INSERT)

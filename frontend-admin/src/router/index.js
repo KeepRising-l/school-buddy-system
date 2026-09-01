@@ -43,6 +43,12 @@ const routes = [
         meta: { title: '举报中心', icon: 'Warning' }
       },
       {
+        path: 'announcement',
+        name: 'AnnouncementManage',
+        component: () => import('@/views/announcement/AnnouncementManage.vue'),
+        meta: { title: '系统公告', icon: 'Bell' }
+      },
+      {
         path: 'stats',
         name: 'StatsView',
         component: () => import('@/views/stats/StatsView.vue'),

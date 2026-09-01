@@ -3,12 +3,6 @@
     <!-- 搜索栏 -->
     <el-card shadow="never" class="search-card">
       <el-form :inline="true" :model="searchForm">
-        <el-form-item label="审核状态">
-          <el-select v-model="searchForm.isAuditPass" placeholder="全部" clearable style="width: 140px">
-            <el-option label="待审核" :value="0" />
-            <el-option label="已通过" :value="1" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="帖子状态">
           <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 140px">
             <el-option label="招募中" value="RECRUITING" />
@@ -26,17 +20,9 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">搜索</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleExportPosts">导出</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
-
-    <!-- 快捷Tab -->
-    <el-card shadow="never" style="margin-bottom: 16px">
-      <el-radio-group v-model="activeTab" @change="handleTabChange">
-        <el-radio-button label="all">全部帖子</el-radio-button>
-        <el-radio-button label="pending">待审核</el-radio-button>
-        <el-radio-button label="passed">已通过</el-radio-button>
-      </el-radio-group>
     </el-card>
 
     <!-- 帖子表格 -->
@@ -57,22 +43,12 @@
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审核状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="auditTagType(row.isAuditPass)">{{ auditLabel(row.isAuditPass) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleView(row)">详情</el-button>
-            <!-- 待审核：通过/拒绝 -->
-            <template v-if="row.isAuditPass === 0">
-              <el-button type="success" size="small" @click="handleAudit(row, true)">通过</el-button>
-              <el-button type="warning" size="small" @click="handleAudit(row, false)">拒绝</el-button>
-            </template>
-            <!-- 已通过且未取消：可下架 -->
+            <!-- 未取消的帖子可下架 -->
             <el-button
-              v-if="row.isAuditPass === 1 && row.status !== 'CANCELLED'"
+              v-if="row.status !== 'CANCELLED'"
               type="danger"
               size="small"
               @click="handleTakedown(row)"
@@ -101,17 +77,14 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getPostList, takedownPost, auditPost, deletePost, getTagList } from '@/api/admin'
+import { getPostList, takedownPost, deletePost, getTagList, exportPosts } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
-
-// 快捷Tab
-const activeTab = ref('all')
+import { downloadFromBlob } from '@/utils/download'
 
 // 搜索表单
 const searchForm = reactive({
   status: '',
-  category: '',
-  isAuditPass: undefined
+  category: ''
 })
 
 // 分类选项
@@ -137,10 +110,6 @@ const statusMap = {
   CANCELLED: { label: '已取消', type: 'danger' }
 }
 
-// 审核状态映射
-const auditLabel = (isAuditPass) => isAuditPass === 1 ? '已通过' : '待审核'
-const auditTagType = (isAuditPass) => isAuditPass === 1 ? 'success' : 'warning'
-
 const statusLabel = (status) => statusMap[status]?.label || status
 const statusTagType = (status) => statusMap[status]?.type || ''
 
@@ -152,8 +121,7 @@ const loadData = async () => {
       page: pagination.page,
       size: pagination.size,
       status: searchForm.status || undefined,
-      category: searchForm.category || undefined,
-      isAuditPass: searchForm.isAuditPass !== undefined && searchForm.isAuditPass !== null ? searchForm.isAuditPass : undefined
+      category: searchForm.category || undefined
     })
     const data = res.data || {}
     tableData.value = data.records || []
@@ -175,25 +143,8 @@ const loadTagOptions = async () => {
   }
 }
 
-// Tab切换
-const handleTabChange = (val) => {
-  if (val === 'all') {
-    searchForm.isAuditPass = undefined
-  } else if (val === 'pending') {
-    searchForm.isAuditPass = 0
-  } else if (val === 'passed') {
-    searchForm.isAuditPass = 1
-  }
-  pagination.page = 1
-  loadData()
-}
-
 // 搜索
 const handleSearch = () => {
-  // 同步Tab状态
-  if (searchForm.isAuditPass === undefined) activeTab.value = 'all'
-  else if (searchForm.isAuditPass === 0) activeTab.value = 'pending'
-  else if (searchForm.isAuditPass === 1) activeTab.value = 'passed'
   pagination.page = 1
   loadData()
 }
@@ -202,8 +153,6 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.status = ''
   searchForm.category = ''
-  searchForm.isAuditPass = undefined
-  activeTab.value = 'all'
   pagination.page = 1
   loadData()
 }
@@ -212,37 +161,6 @@ const handleReset = () => {
 const handleView = (row) => {
   const h5Base = import.meta.env.VITE_H5_BASE || 'http://localhost:3000'
   window.open(`${h5Base}/post/${row.id}`, '_blank')
-}
-
-// 审核帖子（拒绝时填写原因，随通知发送给发布者）
-const handleAudit = async (row, pass) => {
-  try {
-    let reason = ''
-    if (!pass) {
-      const { value } = await ElMessageBox.prompt(
-        '请填写拒绝原因（将随通知发送给发布者，帮助其修改后重新发布）',
-        '拒绝审核',
-        {
-          confirmButtonText: '确认拒绝',
-          cancelButtonText: '取消',
-          inputType: 'textarea',
-          inputPlaceholder: '例如：标题与内容不符 / 地点信息不完整 / 疑似广告',
-          inputValidator: (v) => (v && v.trim().length > 0) || '请填写拒绝原因',
-          inputErrorMessage: '请填写拒绝原因'
-        }
-      )
-      reason = value.trim()
-    } else {
-      await ElMessageBox.confirm(`确定要通过帖子「${row.title}」的审核吗？`, '审核确认', {
-        type: 'success'
-      })
-    }
-    await auditPost(row.id, { pass, reason: reason || undefined })
-    ElMessage.success(pass ? '审核通过' : '已拒绝')
-    loadData()
-  } catch (e) {
-    // 用户取消或请求失败
-  }
 }
 
 // 下架帖子
@@ -272,6 +190,17 @@ const handleDelete = async (row) => {
     loadData()
   } catch (e) {
     // 用户取消或请求失败
+  }
+}
+
+// 导出帖子列表
+const handleExportPosts = async () => {
+  try {
+    const res = await exportPosts()
+    downloadFromBlob(res, 'posts.csv')
+    ElMessage.success('导出成功')
+  } catch (e) {
+    // 错误已在拦截器中处理
   }
 }
 

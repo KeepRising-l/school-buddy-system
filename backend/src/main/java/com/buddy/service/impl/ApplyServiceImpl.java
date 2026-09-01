@@ -74,9 +74,9 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException(ResultCode.POST_NOT_RECRUITING);
         }
 
-        // V1.2 先审后发闭环：未过审帖子不可报名
-        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
-            throw new BusinessException(ResultCode.POST_NOT_RECRUITING, "帖子未通过审核，暂不可报名");
+        // V1.3 先发后审：已下架帖子不可报名
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
+            throw new BusinessException(ResultCode.POST_NOT_RECRUITING, "帖子已被下架，暂不可报名");
         }
 
         // 校验不能报名自己发布的帖子
@@ -196,9 +196,9 @@ public class ApplyServiceImpl implements ApplyService {
      * 候补报名内部实现
      */
     private void doWaitlist(Long userId, Post post) {
-        // V1.2 先审后发闭环：未过审帖子不可候补
-        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
-            throw new BusinessException("帖子未通过审核，暂不可候补");
+        // V1.3 先发后审：已下架帖子不可候补
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
+            throw new BusinessException("帖子已被下架，暂不可候补");
         }
 
         // 校验不能报名自己发布的帖子
@@ -384,9 +384,9 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("当前帖子状态不可审批报名");
         }
 
-        // V1.2 先审后发闭环：未过审帖子不可审批
-        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
-            throw new BusinessException("帖子未通过审核，暂不可审批报名");
+        // V1.3 先发后审：已下架帖子不可审批报名
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
+            throw new BusinessException("帖子已被下架，暂不可审批报名");
         }
 
         // 校验报名状态为PENDING
@@ -443,9 +443,9 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException(ResultCode.FORBIDDEN, "只有发布者才能审批报名");
         }
 
-        // V1.2 先审后发闭环：未过审帖子不可审批
-        if (post.getIsAuditPass() == null || post.getIsAuditPass() != 1) {
-            throw new BusinessException("帖子未通过审核，暂不可审批报名");
+        // V1.3 先发后审：已下架帖子不可审批报名
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
+            throw new BusinessException("帖子已被下架，暂不可审批报名");
         }
 
         // 校验报名状态为PENDING

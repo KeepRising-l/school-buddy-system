@@ -444,9 +444,9 @@ const handleSubmit = async () => {
       requireGender: form.requireGender,
       description: form.description
     })
-    // V1.1 先审后发：发布后进入待审核，需管理员通过后才在广场展示
-    showToast('已提交审核，通过后将在广场展示')
-    router.replace('/mine/posts')
+    // V1.3 先发后审：发布成功直接上广场
+    showToast('发布成功')
+    router.replace('/square')
   } catch (err) {
     // 接口层已处理
   } finally {
