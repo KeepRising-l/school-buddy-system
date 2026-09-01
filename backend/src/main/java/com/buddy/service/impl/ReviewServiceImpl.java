@@ -122,6 +122,25 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void replyReview(Long targetUserId, Long reviewId, String content) {
+        if (content == null || content.trim().isEmpty()) {
+            throw new BusinessException("回复内容不能为空");
+        }
+        Review review = reviewMapper.selectById(reviewId);
+        if (review == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "评价不存在");
+        }
+        // 仅被评价人本人可以回复自己收到的评价
+        if (!review.getTargetUserId().equals(targetUserId)) {
+            throw new BusinessException("只能回复发给自己的评价");
+        }
+        review.setReplyContent(content.trim());
+        review.setReplyTime(LocalDateTime.now());
+        reviewMapper.updateById(review);
+    }
+
+    @Override
     public List<Review> getPostReviews(Long postId) {
         return reviewMapper.selectList(
                 new LambdaQueryWrapper<Review>()

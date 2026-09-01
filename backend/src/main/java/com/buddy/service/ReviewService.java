@@ -16,6 +16,11 @@ public interface ReviewService {
     void submitReview(Long reviewerId, ReviewRequest request);
 
     /**
+     * 被评价人对评价进行回复/解释
+     */
+    void replyReview(Long targetUserId, Long reviewId, String content);
+
+    /**
      * 获取帖子的评价列表
      */
     List<Review> getPostReviews(Long postId);

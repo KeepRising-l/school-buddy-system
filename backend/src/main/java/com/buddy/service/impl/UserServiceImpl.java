@@ -582,6 +582,8 @@ public class UserServiceImpl implements UserService {
         vo.setRating(review.getRating());
         vo.setTag(review.getTag());
         vo.setContent(review.getContent());
+        vo.setReplyContent(review.getReplyContent());
+        vo.setReplyTime(review.getReplyTime());
         vo.setCreatedTime(review.getCreatedTime());
 
         // 评价人昵称

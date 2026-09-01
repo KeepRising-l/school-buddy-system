@@ -36,5 +36,11 @@ public class ReviewVO {
     /** 评价内容 */
     private String content;
 
+    /** 被评价人的回复（互评解释） */
+    private String replyContent;
+
+    /** 回复时间 */
+    private LocalDateTime replyTime;
+
     private LocalDateTime createdTime;
 }

@@ -135,6 +135,8 @@ CREATE TABLE `review` (
     `rating`         TINYINT       NOT NULL           COMMENT '1-5 星',
     `tag`            VARCHAR(32)   DEFAULT NULL       COMMENT '靠谱/爽约/迟到',
     `content`        VARCHAR(500)  DEFAULT NULL,
+    `reply_content`  VARCHAR(500)  DEFAULT NULL       COMMENT '被评价人的回复（互评解释）',
+    `reply_time`     DATETIME      DEFAULT NULL       COMMENT '回复时间',
     `created_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_reviewer_target` (`post_id`, `reviewer_id`, `target_user_id`),

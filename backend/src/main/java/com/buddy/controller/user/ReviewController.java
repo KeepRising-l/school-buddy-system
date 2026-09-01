@@ -2,6 +2,7 @@ package com.buddy.controller.user;
 
 import com.buddy.common.context.UserContext;
 import com.buddy.common.result.R;
+import com.buddy.dto.request.ReviewReplyRequest;
 import com.buddy.dto.request.ReviewRequest;
 import com.buddy.entity.Review;
 import com.buddy.service.ReviewService;
@@ -37,6 +38,16 @@ public class ReviewController {
     @GetMapping("/list/{postId}")
     public R<List<Review>> getPostReviews(@PathVariable Long postId) {
         return R.ok(reviewService.getPostReviews(postId));
+    }
+
+    /**
+     * 被评价人对评价进行回复/解释（互评双向）
+     */
+    @PostMapping("/reply")
+    public R<Void> replyReview(@RequestBody @Valid ReviewReplyRequest request) {
+        Long userId = UserContext.getUserId();
+        reviewService.replyReview(userId, request.getReviewId(), request.getContent());
+        return R.ok();
     }
 
     /**

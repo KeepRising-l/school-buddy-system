@@ -82,7 +82,36 @@
             <van-rate :model-value="review.rating" readonly :size="14" color="#f59e0b" void-color="#e5e7eb" />
           </div>
           <p class="review-content">{{ review.content || '（无文字评价）' }}</p>
-          <span class="review-time">{{ formatTime(review.createdTime) }}</span>
+          <span class="review-time">
+            {{ formatTime(review.createdTime) }}
+            <template v-if="review.replyTime"> · 已回复 {{ formatTime(review.replyTime) }}</template>
+          </span>
+
+          <!-- 被评价人的回复（互评双向） -->
+          <div class="review-reply" v-if="review.replyContent">
+            <span class="reply-label">回复：</span>{{ review.replyContent }}
+          </div>
+
+          <!-- 我自己收到的评价：可回复/解释 -->
+          <template v-if="isMe && !review.replyContent">
+            <div class="reply-box">
+              <van-field
+                v-model="replyInputs[review.id]"
+                type="textarea"
+                class="reply-input"
+                rows="2"
+                maxlength="500"
+                placeholder="回复这条评价（可解释情况）"
+              />
+              <van-button
+                size="small"
+                class="reply-btn"
+                :loading="replyingId === review.id"
+                loading-text="发送中..."
+                @click="handleReply(review)"
+              >回复</van-button>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -102,14 +131,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { showToast } from 'vant'
 import { getUserProfile } from '@/api/user'
+import { replyReview } from '@/api/review'
+import { useUserStore } from '@/store/user'
 import CreditStar from '@/components/CreditStar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
+const myId = userStore.userInfo?.id
 
 // 用户ID（可变：主页之间跳转时组件复用，需跟随路由参数更新）
 let userId = route.params.userId
@@ -171,6 +205,30 @@ const formatTime = (time) => {
   if (!time) return ''
   const d = new Date(time)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
+// 是否查看自己的主页（决定"收到的评价"能否回复）
+const isMe = computed(() => myId && String(route.params.userId) === String(myId))
+
+// 评价回复（互评双向）
+const replyInputs = reactive({})
+const replyingId = ref(null)
+const handleReply = async (review) => {
+  const content = (replyInputs[review.id] || '').trim()
+  if (!content) { showToast('请输入回复内容'); return }
+  if (replyingId.value) return
+  replyingId.value = review.id
+  try {
+    await replyReview({ reviewId: review.id, content })
+    review.replyContent = content
+    review.replyTime = new Date().toISOString()
+    replyInputs[review.id] = ''
+    showToast('回复成功')
+  } catch (e) {
+    // 接口层已处理
+  } finally {
+    replyingId.value = null
+  }
 }
 
 // 路由参数变化（/user/1 -> /user/2）时重新加载，避免组件复用导致数据错乱（V1.2 修复）
@@ -357,6 +415,40 @@ onMounted(() => {
     .review-time {
       font-size: 11px;
       color: var(--text-hint);
+    }
+
+    .review-reply {
+      margin-top: 6px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--bg-grey);
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+
+      .reply-label {
+        color: var(--text-hint);
+      }
+    }
+
+    .reply-box {
+      margin-top: 8px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+
+      .reply-input {
+        flex: 1;
+        :deep(.van-field__control) {
+          font-size: 12px;
+        }
+      }
+
+      .reply-btn {
+        flex-shrink: 0;
+        background: var(--primary);
+        border-color: var(--primary);
+      }
     }
   }
 
