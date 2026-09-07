@@ -118,7 +118,7 @@ backend-v2 空壳 + auth/user 最小闭环，冒烟全过（见项目状态 C-00
 | 切片 | 状态 | 完成时间 | Commit |
 |---|---|---|---|
 | S0 Demo 验证 | ✅ 已完成 | 2026-09-07 | 4a12c66 |
-| S1 notification | 待开发 | - | - |
+| S1 notification | ✅ 已完成 | 2026-09-07 | 见本切片提交 |
 | S2 credit | 待开发 | - | - |
 | S3 post | 待开发 | - | - |
 | S4 apply | 待开发 | - | - |

@@ -9,7 +9,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 包结构：按业务功能模块划分（module/auth、module/user、module/post...）
  */
 @SpringBootApplication
-@MapperScan({"com.buddy.module.user.mapper"})
+@MapperScan({"com.buddy.module.user.mapper", "com.buddy.module.notification.mapper"})
 public class BuddyApplication {
 
     public static void main(String[] args) {
