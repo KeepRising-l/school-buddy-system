@@ -13,7 +13,7 @@
 - 项目目标：同需求草稿（校园兴趣搭子预约系统）；
 - 技术边界：单体应用，无微服务、无消息队列、无第三方云服务；
 - 技术栈：
-  - 后端：**Java 17（或 21）+ Spring Boot 3.3.x** + MyBatis-Plus 3.5.5+（Boot3 starter）+ MySQL 8 + Redis（Lettuce）+ jjwt 0.12.x + Hutool 5.8 + Lombok + Validation；Maven；
+  - 后端：**Java 17 + Spring Boot 3.3.x** + MyBatis-Plus 3.5.5+（Boot3 starter）+ MySQL 8 + Redis（Lettuce）+ jjwt 0.12.x + Hutool 5.8 + Lombok + Validation；Maven；
   - 前端 H5：Vue 3 + Vite 5 + Vue Router 4 + Pinia + Axios + Vant 4（不变）；
   - 前端管理端：Vue 3 + Vite 5 + Element Plus 2.6 + ECharts 5（不变）；
 - 总体方案：按业务模块重组后端代码，整体重写（旧代码为行为基准），行为与旧版等价。
@@ -90,7 +90,7 @@ com.buddy
 
 ## 5.2 核心业务服务（与旧版等价迁移）
 
-PostService（发布/详情/取消/评论/状态流转）、ApplyService（报名/候补/审批/出勤）、CreditService（台账+重算+等级）、RecommendService（打分排序）、NotificationService（8 类通知发送）、StatsService（统计导出）、SensitiveWordService（敏感词）等。
+PostService（发布/详情/取消/评论/状态流转）、ApplyService（报名/候补/审批/出勤）、CreditService（台账+重算+等级）、RecommendService（打分排序）、NotificationService（7 类通知发送，去除审核类通知，D-011）、StatsService（统计导出）、SensitiveWordService（敏感词）等。
 
 ## 5.3 权限 / 状态 / 异常
 
@@ -121,7 +121,7 @@ PostService（发布/详情/取消/评论/状态流转）、ApplyService（报�
   - H5：15 路由、TabbarLayout、PostCard 等组件、pinia user store、request.js 拦截器（h5_token）；
   - 管理端：8 路由、Layout/Sidebar/Header、admin store、download.js 导出（admin_token）；
 - 仅在联调发现依赖旧版行为差异时做最小修正；
-- 【AI 建议，可选项】前端 API 层按新后端模块目录对齐重排（不影响行为，纯可读性）——待你裁决。
+- 前端 API 层不重排，保持现有组织不动（D-012 用户确认：不重排，前端零改动）。
 
 # 8. 关键业务规则技术实现（等价迁移清单）
 
