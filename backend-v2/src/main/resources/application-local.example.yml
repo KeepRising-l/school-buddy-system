@@ -1,0 +1,16 @@
+# =====================================================
+# 本地开发环境配置模板（此文件可以提交到仓库）
+#
+# 使用方法：
+#   1. 把旧项目 backend/src/main/resources/application-local.yml 复制到本目录同名位置
+#      （数据库密码与 JWT 密钥与旧后端保持一致，连接同一个 school_buddy 库）
+#   2. application-local.yml 已在 .gitignore 里，不会被提交到仓库
+# =====================================================
+spring:
+  datasource:
+    # 你的 MySQL root 密码（改成你自己的！）
+    password: your_mysql_password_here
+
+jwt:
+  # JWT 签名密钥（改成你自己的随机长字符串，至少 32 个字符）
+  secret: your_jwt_secret_here_at_least_32_chars
