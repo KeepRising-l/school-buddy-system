@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.constant.PostStatus;
+import com.buddy.converter.PostConverter;
 import com.buddy.dto.response.PostVO;
 import com.buddy.entity.InterestTag;
 import com.buddy.entity.Post;
@@ -56,6 +57,9 @@ public class RecommendServiceImpl implements RecommendService {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private PostConverter postConverter;
 
     /** 推荐缓存前缀 */
     private static final String RECOMMEND_CACHE_PREFIX = "recommend:";
@@ -131,7 +135,7 @@ public class RecommendServiceImpl implements RecommendService {
             voList = new ArrayList<>();
         } else {
             voList = scoredPosts.subList(fromIndex, toIndex).stream()
-                    .map(sp -> convertToPostVO(sp.post))
+                    .map(sp -> postConverter.toVO(sp.post))
                     .collect(Collectors.toList());
         }
 
@@ -262,59 +266,8 @@ public class RecommendServiceImpl implements RecommendService {
         IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);
 
         IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
-        voPage.setRecords(postPage.getRecords().stream()
-                .map(this::convertToPostVO)
-                .collect(Collectors.toList()));
+        voPage.setRecords(postConverter.toVOList(postPage.getRecords()));
         return voPage;
-    }
-
-    /**
-     * 将Post实体转换为PostVO
-     */
-    private PostVO convertToPostVO(Post post) {
-        PostVO vo = new PostVO();
-        vo.setId(post.getId());
-        vo.setTitle(post.getTitle());
-        vo.setCategory(post.getCategory());
-        vo.setTagIds(post.getTagIds());
-        vo.setStartTime(post.getStartTime());
-        vo.setEndTime(post.getEndTime());
-        vo.setLocation(post.getLocation());
-        vo.setMaxPeople(post.getMaxPeople());
-        vo.setCurrentPeople(post.getCurrentPeople());
-        vo.setStatus(post.getStatus());
-        vo.setViewCount(post.getViewCount());
-        vo.setPublisherId(post.getPublisherId());
-        vo.setCreatedTime(post.getCreatedTime());
-        vo.setDescription(post.getDescription());
-        vo.setIsAuditPass(post.getIsAuditPass());
-        vo.setRequireLevel(post.getRequireLevel());
-        vo.setRequireGender(post.getRequireGender());
-
-        // 根据tagIds查询标签名称
-        if (StrUtil.isNotBlank(post.getTagIds())) {
-            List<String> names = new ArrayList<>();
-            for (String idStr : post.getTagIds().split(",")) {
-                try {
-                    Long tagId = Long.valueOf(idStr.trim());
-                    InterestTag tag = interestTagMapper.selectById(tagId);
-                    if (tag != null) {
-                        names.add(tag.getName());
-                    }
-                } catch (NumberFormatException ignored) {
-                }
-            }
-            vo.setTagName(String.join(",", names));
-        }
-
-        // 查询发布者信息
-        User publisher = userMapper.selectById(post.getPublisherId());
-        if (publisher != null) {
-            vo.setPublisherNickname(publisher.getNickname());
-            vo.setPublisherAvatar(publisher.getAvatar());
-            vo.setPublisherCreditLevel(creditService.getCreditLevel(publisher.getCreditScore()));
-        }
-        return vo;
     }
 
     /**

@@ -9,6 +9,7 @@ import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
+import com.buddy.converter.PostConverter;
 import com.buddy.dto.response.PostVO;
 import com.buddy.dto.response.UserVO;
 import com.buddy.entity.*;
@@ -22,9 +23,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -56,6 +60,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Autowired
     private CreditService creditService;
+
+    @Autowired
+    private PostConverter postConverter;
 
     @Autowired
     private NotificationService notificationService;
@@ -99,9 +106,7 @@ public class AdminServiceImpl implements AdminService {
         IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);
 
         IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
-        voPage.setRecords(postPage.getRecords().stream()
-                .map(this::convertToPostVO)
-                .collect(Collectors.toList()));
+        voPage.setRecords(postConverter.toVOList(postPage.getRecords()));
         return voPage;
     }
 
@@ -112,21 +117,25 @@ public class AdminServiceImpl implements AdminService {
                 .orderByDesc(PostApply::getApplyTime);
         IPage<PostApply> applyPage = postApplyMapper.selectPage(new Page<>(page, size), wrapper);
 
+        // 批量查出本页所有帖子标题（避免每条报名一次 selectById）
+        Map<Long, Post> postMap = toPostMap(applyPage.getRecords());
+
         IPage<Map<String, Object>> resultPage = new Page<>(applyPage.getCurrent(), applyPage.getSize(), applyPage.getTotal());
-        resultPage.setRecords(applyPage.getRecords().stream().map(apply -> {
+        List<Map<String, Object>> records = new ArrayList<>(applyPage.getRecords().size());
+        for (PostApply apply : applyPage.getRecords()) {
             Map<String, Object> map = new HashMap<>();
             map.put("id", apply.getId());
             map.put("postId", apply.getPostId());
             map.put("status", apply.getStatus());
             map.put("applyTime", apply.getApplyTime());
             map.put("handleTime", apply.getHandleTime());
-            // 查询帖子标题
-            Post post = postMapper.selectById(apply.getPostId());
+            Post post = apply.getPostId() != null ? postMap.get(apply.getPostId()) : null;
             if (post != null) {
                 map.put("postTitle", post.getTitle());
             }
-            return map;
-        }).collect(Collectors.toList()));
+            records.add(map);
+        }
+        resultPage.setRecords(records);
         return resultPage;
     }
 
@@ -138,8 +147,26 @@ public class AdminServiceImpl implements AdminService {
                 .orderByDesc(Review::getCreatedTime);
         IPage<Review> reviewPage = reviewMapper.selectPage(new Page<>(page, size), wrapper);
 
+        // 批量查出评价人与帖子标题（避免每条评价两次 selectById）
+        List<Review> reviews = reviewPage.getRecords();
+        Set<Long> reviewerIds = new HashSet<>();
+        Set<Long> postIds = new HashSet<>();
+        for (Review r : reviews) {
+            if (r.getReviewerId() != null) {
+                reviewerIds.add(r.getReviewerId());
+            }
+            if (r.getPostId() != null) {
+                postIds.add(r.getPostId());
+            }
+        }
+        Map<Long, User> reviewerMap = reviewerIds.isEmpty() ? java.util.Collections.emptyMap()
+                : toMapById(userMapper.selectBatchIds(reviewerIds), User::getId);
+        Map<Long, Post> postMap = postIds.isEmpty() ? java.util.Collections.emptyMap()
+                : toMapById(postMapper.selectBatchIds(postIds), Post::getId);
+
         IPage<Map<String, Object>> resultPage = new Page<>(reviewPage.getCurrent(), reviewPage.getSize(), reviewPage.getTotal());
-        resultPage.setRecords(reviewPage.getRecords().stream().map(review -> {
+        List<Map<String, Object>> records = new ArrayList<>(reviews.size());
+        for (Review review : reviews) {
             Map<String, Object> map = new HashMap<>();
             map.put("id", review.getId());
             map.put("postId", review.getPostId());
@@ -148,18 +175,17 @@ public class AdminServiceImpl implements AdminService {
             map.put("tag", review.getTag());
             map.put("content", review.getContent());
             map.put("createdTime", review.getCreatedTime());
-            // 查询评价人昵称
-            User reviewer = userMapper.selectById(review.getReviewerId());
+            User reviewer = review.getReviewerId() != null ? reviewerMap.get(review.getReviewerId()) : null;
             if (reviewer != null) {
                 map.put("reviewerNickname", reviewer.getNickname());
             }
-            // 查询帖子标题
-            Post post = postMapper.selectById(review.getPostId());
+            Post post = review.getPostId() != null ? postMap.get(review.getPostId()) : null;
             if (post != null) {
                 map.put("postTitle", post.getTitle());
             }
-            return map;
-        }).collect(Collectors.toList()));
+            records.add(map);
+        }
+        resultPage.setRecords(records);
         return resultPage;
     }
 
@@ -234,9 +260,7 @@ public class AdminServiceImpl implements AdminService {
 
         // 转换为PostVO
         IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
-        voPage.setRecords(postPage.getRecords().stream()
-                .map(this::convertToPostVO)
-                .collect(Collectors.toList()));
+        voPage.setRecords(postConverter.toVOList(postPage.getRecords()));
         return voPage;
     }
 
@@ -338,35 +362,30 @@ public class AdminServiceImpl implements AdminService {
         return vo;
     }
 
-    /**
-     * 将Post实体转换为PostVO
-     */
-    private PostVO convertToPostVO(Post post) {
-        PostVO vo = new PostVO();
-        vo.setId(post.getId());
-        vo.setTitle(post.getTitle());
-        vo.setCategory(post.getCategory());
-        vo.setTagIds(post.getTagIds());
-        vo.setStartTime(post.getStartTime());
-        vo.setEndTime(post.getEndTime());
-        vo.setLocation(post.getLocation());
-        vo.setMaxPeople(post.getMaxPeople());
-        vo.setCurrentPeople(post.getCurrentPeople());
-        vo.setStatus(post.getStatus());
-        vo.setViewCount(post.getViewCount());
-        vo.setPublisherId(post.getPublisherId());
-        vo.setCreatedTime(post.getCreatedTime());
-        vo.setIsAuditPass(post.getIsAuditPass());
-        vo.setRequireLevel(post.getRequireLevel());
-        vo.setRequireGender(post.getRequireGender());
-
-        // 查询发布者信息
-        User publisher = userMapper.selectById(post.getPublisherId());
-        if (publisher != null) {
-            vo.setPublisherNickname(publisher.getNickname());
-            vo.setPublisherAvatar(publisher.getAvatar());
-            vo.setPublisherCreditLevel(creditService.getCreditLevel(publisher.getCreditScore()));
+    /** 从报名记录批量收集帖子ID并查询出 Map<postId, Post>（避免 N+1） */
+    private Map<Long, Post> toPostMap(List<PostApply> applies) {
+        Set<Long> postIds = new HashSet<>();
+        for (PostApply apply : applies) {
+            if (apply.getPostId() != null) {
+                postIds.add(apply.getPostId());
+            }
         }
-        return vo;
+        if (postIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        return toMapById(postMapper.selectBatchIds(postIds), Post::getId);
+    }
+
+    private static <T> Map<Long, T> toMapById(List<T> items, java.util.function.Function<T, Long> idFn) {
+        Map<Long, T> map = new HashMap<>();
+        if (items != null) {
+            for (T item : items) {
+                Long key = idFn.apply(item);
+                if (key != null) {
+                    map.put(key, item);
+                }
+            }
+        }
+        return map;
     }
 }

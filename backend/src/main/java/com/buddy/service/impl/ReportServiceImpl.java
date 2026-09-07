@@ -23,8 +23,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 举报服务实现类（V1.1）
@@ -233,20 +238,104 @@ public class ReportServiceImpl implements ReportService {
     }
 
     /**
-     * 分页实体转VO
+     * 分页实体转VO（批量：一次 IN 查询出所有举报人/处理人/被举报对象，解决 N+1）
      */
     private IPage<ReportVO> convertPage(IPage<Report> reportPage) {
+        List<Report> records = reportPage.getRecords();
         IPage<ReportVO> voPage = new Page<>(reportPage.getCurrent(), reportPage.getSize(), reportPage.getTotal());
-        voPage.setRecords(reportPage.getRecords().stream()
-                .map(this::convertToVO)
-                .collect(Collectors.toList()));
+        if (records == null || records.isEmpty()) {
+            voPage.setRecords(new ArrayList<>());
+            return voPage;
+        }
+
+        // 收集所有需要查询的用户ID（举报人、处理人、被举报的用户）与帖子ID（被举报的帖子）
+        Set<Long> userIds = new HashSet<>();
+        Set<Long> postIds = new HashSet<>();
+        for (Report r : records) {
+            if (r.getReporterId() != null) {
+                userIds.add(r.getReporterId());
+            }
+            if (r.getHandleBy() != null) {
+                userIds.add(r.getHandleBy());
+            }
+            if (Report.TARGET_POST.equals(r.getTargetType())) {
+                if (r.getTargetId() != null) {
+                    postIds.add(r.getTargetId());
+                }
+            } else if (r.getTargetId() != null) {
+                userIds.add(r.getTargetId());
+            }
+        }
+
+        // 三次变两次：人和帖各查一次即可
+        Map<Long, User> userMap = userIds.isEmpty()
+                ? Collections.emptyMap()
+                : toMapById(userMapper.selectBatchIds(userIds), User::getId);
+        Map<Long, Post> postMap = postIds.isEmpty()
+                ? Collections.emptyMap()
+                : toMapById(postMapper.selectBatchIds(postIds), Post::getId);
+
+        List<ReportVO> voList = new ArrayList<>(records.size());
+        for (Report r : records) {
+            ReportVO vo = baseReportVO(r);
+            User reporter = userMap.get(r.getReporterId());
+            if (reporter != null) {
+                vo.setReporterNickname(reporter.getNickname());
+            }
+            if (r.getHandleBy() != null) {
+                User handler = userMap.get(r.getHandleBy());
+                if (handler != null) {
+                    vo.setHandleByName(handler.getNickname());
+                }
+            }
+            if (Report.TARGET_POST.equals(r.getTargetType())) {
+                Post post = postMap.get(r.getTargetId());
+                if (post != null) {
+                    vo.setTargetTitle(post.getTitle());
+                }
+            } else {
+                User user = userMap.get(r.getTargetId());
+                if (user != null) {
+                    vo.setTargetTitle(user.getNickname());
+                }
+            }
+            voList.add(vo);
+        }
+        voPage.setRecords(voList);
         return voPage;
     }
 
     /**
-     * 实体转VO（含对象标题、处理人昵称）
+     * 实体转VO（单条，详情页使用）
      */
     private ReportVO convertToVO(Report report) {
+        ReportVO vo = baseReportVO(report);
+        User reporter = report.getReporterId() != null ? userMapper.selectById(report.getReporterId()) : null;
+        if (reporter != null) {
+            vo.setReporterNickname(reporter.getNickname());
+        }
+        if (report.getHandleBy() != null) {
+            User handler = userMapper.selectById(report.getHandleBy());
+            if (handler != null) {
+                vo.setHandleByName(handler.getNickname());
+            }
+        }
+        if (Report.TARGET_POST.equals(report.getTargetType())) {
+            Post post = report.getTargetId() != null ? postMapper.selectById(report.getTargetId()) : null;
+            if (post != null) {
+                vo.setTargetTitle(post.getTitle());
+            }
+        } else if (report.getTargetId() != null) {
+            User user = userMapper.selectById(report.getTargetId());
+            if (user != null) {
+                vo.setTargetTitle(user.getNickname());
+            }
+        }
+        return vo;
+    }
+
+    /** 基础字段拷贝（不含关联查询） */
+    private ReportVO baseReportVO(Report report) {
         ReportVO vo = new ReportVO();
         vo.setId(report.getId());
         vo.setReporterId(report.getReporterId());
@@ -258,31 +347,19 @@ public class ReportServiceImpl implements ReportService {
         vo.setHandleRemark(report.getHandleRemark());
         vo.setHandleTime(report.getHandleTime());
         vo.setCreatedTime(report.getCreatedTime());
-
-        // 举报人昵称
-        User reporter = userMapper.selectById(report.getReporterId());
-        if (reporter != null) {
-            vo.setReporterNickname(reporter.getNickname());
-        }
-        // 处理人昵称
-        if (report.getHandleBy() != null) {
-            User handler = userMapper.selectById(report.getHandleBy());
-            if (handler != null) {
-                vo.setHandleByName(handler.getNickname());
-            }
-        }
-        // 被举报对象标题
-        if (Report.TARGET_POST.equals(report.getTargetType())) {
-            Post post = postMapper.selectById(report.getTargetId());
-            if (post != null) {
-                vo.setTargetTitle(post.getTitle());
-            }
-        } else {
-            User user = userMapper.selectById(report.getTargetId());
-            if (user != null) {
-                vo.setTargetTitle(user.getNickname());
-            }
-        }
         return vo;
+    }
+
+    private static <T> Map<Long, T> toMapById(List<T> items, java.util.function.Function<T, Long> idFn) {
+        Map<Long, T> map = new HashMap<>();
+        if (items != null) {
+            for (T item : items) {
+                Long key = idFn.apply(item);
+                if (key != null) {
+                    map.put(key, item);
+                }
+            }
+        }
+        return map;
     }
 }
