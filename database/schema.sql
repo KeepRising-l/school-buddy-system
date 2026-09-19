@@ -92,6 +92,7 @@ CREATE TABLE `post` (
     PRIMARY KEY (`id`),
     KEY `idx_publisher` (`publisher_id`),
     KEY `idx_status_time` (`status`, `start_time`)
+    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='组局帖子表';
 
 -- -----------------------------------------------------
@@ -111,6 +112,7 @@ CREATE TABLE `post_apply` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_applicant` (`post_id`, `applicant_id`),
     KEY `idx_applicant` (`applicant_id`)
+    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='报名表';
 
 -- -----------------------------------------------------
@@ -131,6 +133,7 @@ CREATE TABLE `review` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_reviewer_target` (`post_id`, `reviewer_id`, `target_user_id`),
     KEY `idx_target` (`target_user_id`)
+    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评价表';
 
 -- -----------------------------------------------------
@@ -145,6 +148,7 @@ CREATE TABLE `post_comment` (
     `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_post` (`post_id`)
+    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------
@@ -180,6 +184,7 @@ CREATE TABLE `favorite` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_post` (`user_id`, `post_id`),
     KEY `idx_post` (`post_id`)
+    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏表';
 
 -- -----------------------------------------------------

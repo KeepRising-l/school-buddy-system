@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @EnableScheduling
-@MapperScan({"com.buddy.module.user.mapper", "com.buddy.module.notification.mapper", "com.buddy.module.credit.mapper", "com.buddy.module.review.mapper"})
+@MapperScan({"com.buddy.module.user.mapper", "com.buddy.module.notification.mapper", "com.buddy.module.credit.mapper", "com.buddy.module.review.mapper", "com.buddy.module.post.mapper", "com.buddy.module.apply.mapper", "com.buddy.module.tag.mapper"})
 public class BuddyApplication {
 
     public static void main(String[] args) {

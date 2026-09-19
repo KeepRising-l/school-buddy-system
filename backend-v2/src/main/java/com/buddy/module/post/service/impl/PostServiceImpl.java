@@ -1,0 +1,393 @@
+package com.buddy.module.post.service.impl;
+
+import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.buddy.common.constant.ApplyStatus;
+import com.buddy.common.constant.PostStatus;
+import com.buddy.common.exception.BusinessException;
+import com.buddy.common.result.ResultCode;
+import com.buddy.common.statemachine.PostStateMachine;
+import com.buddy.module.apply.entity.PostApply;
+import com.buddy.module.apply.mapper.PostApplyMapper;
+import com.buddy.module.credit.service.CreditService;
+import com.buddy.module.notification.entity.Notification;
+import com.buddy.module.notification.service.NotificationService;
+import com.buddy.module.post.dto.PostDetailVO;
+import com.buddy.module.post.dto.request.PostCreateRequest;
+import com.buddy.module.post.entity.Post;
+import com.buddy.module.post.mapper.PostMapper;
+import com.buddy.module.post.service.PostService;
+import com.buddy.module.post.service.SensitiveWordService;
+import com.buddy.module.tag.entity.InterestTag;
+import com.buddy.module.tag.entity.UserTag;
+import com.buddy.module.tag.mapper.InterestTagMapper;
+import com.buddy.module.tag.mapper.UserTagMapper;
+import com.buddy.module.user.entity.User;
+import com.buddy.module.user.mapper.UserMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 帖子服务实现类（等价迁移自旧版）
+ */
+@Service
+public class PostServiceImpl implements PostService {
+
+    @Autowired
+    private PostMapper postMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private PostApplyMapper postApplyMapper;
+
+    @Autowired
+    private UserTagMapper userTagMapper;
+
+    @Autowired
+    private InterestTagMapper interestTagMapper;
+
+    @Autowired
+    private CreditService creditService;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private SensitiveWordService sensitiveWordService;
+
+    /** 浏览量去重缓存前缀 */
+    private static final String VIEW_COUNT_KEY = "post:view:";
+
+    /** 去重时间窗口（分钟） */
+    private static final long VIEW_DEDUP_MINUTES = 10;
+
+    /** 同时进行中帖子上限 */
+    private static final int MAX_ACTIVE_POSTS = 5;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createPost(Long userId, PostCreateRequest request) {
+        // 校验信誉分
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        if (creditService.isLowCredit(user.getCreditScore())) {
+            throw new BusinessException(ResultCode.CREDIT_TOO_LOW);
+        }
+
+        // 违禁词检测（先发后审第一道防线）
+        List<String> hitWords = sensitiveWordService.check(
+                request.getTitle(),
+                request.getDescription(),
+                request.getLocation()
+        );
+        if (!hitWords.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "内容包含违禁词：" + String.join("、", hitWords) + "，请修改后重新发布");
+        }
+
+        // 校验时间合法性（不校验会导致帖子刚发布就被定时任务置为进行中/已结束）
+        if (request.getStartTime() == null || request.getEndTime() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "开始/结束时间不能为空");
+        }
+        if (!request.getStartTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "开始时间必须晚于当前时间");
+        }
+        if (!request.getEndTime().isAfter(request.getStartTime())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "结束时间必须晚于开始时间");
+        }
+        if (Duration.between(request.getStartTime(), request.getEndTime()).toHours() > 24) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "活动时长不能超过24小时");
+        }
+
+        // 校验段位/性别要求范围
+        if (request.getRequireLevel() != null && (request.getRequireLevel() < 1 || request.getRequireLevel() > 5)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "段位要求不合法（1-5）");
+        }
+        if (request.getRequireGender() != null && (request.getRequireGender() < 0 || request.getRequireGender() > 2)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "性别要求不合法（0-2）");
+        }
+
+        // 校验同时进行中的帖子数量
+        Long activeCount = postMapper.selectCount(
+                new LambdaQueryWrapper<Post>()
+                        .eq(Post::getPublisherId, userId)
+                        .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL, PostStatus.ONGOING)
+        );
+        if (activeCount >= MAX_ACTIVE_POSTS) {
+            throw new BusinessException("同时进行中的帖子不能超过" + MAX_ACTIVE_POSTS + "个");
+        }
+
+        // 构建帖子实体
+        Post post = new Post();
+        post.setPublisherId(userId);
+        post.setTitle(request.getTitle());
+        post.setCategory(request.getCategory());
+        post.setTagIds(request.getTagIds());
+        post.setStartTime(request.getStartTime());
+        post.setEndTime(request.getEndTime());
+        post.setLocation(request.getLocation());
+        post.setMaxPeople(request.getMaxPeople());
+        post.setCurrentPeople(1); // 发布者自己算1人
+        post.setRequireLevel(request.getRequireLevel());
+        post.setRequireGender(request.getRequireGender());
+        post.setDescription(request.getDescription());
+        post.setStatus(PostStatus.RECRUITING);
+        post.setViewCount(0);
+        post.setLikeCount(0);
+        // 先发后审：通过违禁词检测后直接发布（1），违规内容靠举报兜底
+        post.setIsAuditPass(1);
+
+        postMapper.insert(post);
+        return post.getId();
+    }
+
+    @Override
+    public PostDetailVO getPostDetail(Long userId, Long postId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+
+        // 先发后审：被下架的帖子（is_audit_pass=2）仅发布者可查看，他人视为不存在
+        if (post.getIsAuditPass() != null && post.getIsAuditPass() == 2) {
+            boolean isOwner = userId != null && post.getPublisherId().equals(userId);
+            if (!isOwner) {
+                throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+            }
+        }
+
+        // 查询发布者信息
+        User publisher = userMapper.selectById(post.getPublisherId());
+
+        // 查询已通过报名的用户列表（不返回 PENDING 待审核用户，保护隐私且与人数一致）
+        List<PostApply> applies = postApplyMapper.selectList(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .eq(PostApply::getStatus, ApplyStatus.APPROVED)
+        );
+
+        // 批量查询报名用户信息（避免每条报名一次 selectById）
+        Set<Long> applicantIds = new HashSet<>();
+        for (PostApply apply : applies) {
+            if (apply.getApplicantId() != null) {
+                applicantIds.add(apply.getApplicantId());
+            }
+        }
+        Map<Long, User> applyUserMap = applicantIds.isEmpty()
+                ? Collections.emptyMap()
+                : toUserMap(userMapper.selectBatchIds(applicantIds));
+
+        // 组装报名用户信息
+        List<PostDetailVO.ApplyUserVO> applyUsers = new ArrayList<>();
+        for (PostApply apply : applies) {
+            User applyUser = apply.getApplicantId() != null ? applyUserMap.get(apply.getApplicantId()) : null;
+            if (applyUser != null) {
+                PostDetailVO.ApplyUserVO vo = new PostDetailVO.ApplyUserVO();
+                vo.setUserId(applyUser.getId());
+                vo.setNickname(applyUser.getNickname());
+                vo.setAvatar(applyUser.getAvatar());
+                vo.setCreditLevel(creditService.getCreditLevel(applyUser.getCreditScore()));
+                applyUsers.add(vo);
+            }
+        }
+
+        // 判断当前用户是否已报名
+        boolean hasApplied = false;
+        String applyStatus = null;
+        Long myApplyId = null;
+        if (userId != null) {
+            PostApply myApply = postApplyMapper.selectOne(
+                    new LambdaQueryWrapper<PostApply>()
+                            .eq(PostApply::getPostId, postId)
+                            .eq(PostApply::getApplicantId, userId)
+                            .last("LIMIT 1")
+            );
+            if (myApply != null) {
+                hasApplied = true;
+                applyStatus = myApply.getStatus();
+                myApplyId = myApply.getId();
+            }
+        }
+
+        // 组装PostDetailVO
+        PostDetailVO detailVO = new PostDetailVO();
+        detailVO.setId(post.getId());
+        detailVO.setTitle(post.getTitle());
+        detailVO.setCategory(post.getCategory());
+        detailVO.setTagIds(post.getTagIds());
+        detailVO.setStartTime(post.getStartTime());
+        detailVO.setEndTime(post.getEndTime());
+        detailVO.setLocation(post.getLocation());
+        detailVO.setMaxPeople(post.getMaxPeople());
+        detailVO.setCurrentPeople(post.getCurrentPeople());
+        detailVO.setStatus(post.getStatus());
+        detailVO.setViewCount(post.getViewCount());
+        detailVO.setPublisherId(post.getPublisherId());
+        detailVO.setCreatedTime(post.getCreatedTime());
+        detailVO.setRequireLevel(post.getRequireLevel());
+        detailVO.setRequireGender(post.getRequireGender());
+        detailVO.setDescription(post.getDescription());
+        detailVO.setIsAuditPass(post.getIsAuditPass());
+        detailVO.setApplyUsers(applyUsers);
+        detailVO.setHasApplied(hasApplied);
+        detailVO.setApplyStatus(applyStatus);
+        detailVO.setMyApplyId(myApplyId);
+
+        if (publisher != null) {
+            detailVO.setPublisherNickname(publisher.getNickname());
+            detailVO.setPublisherAvatar(publisher.getAvatar());
+            detailVO.setPublisherCreditLevel(creditService.getCreditLevel(publisher.getCreditScore()));
+            detailVO.setPublisherSignature(publisher.getSignature());
+            detailVO.setPublisherCollege(publisher.getCollege());
+
+            // 查询发布者的兴趣标签
+            List<UserTag> publisherUserTags = userTagMapper.selectList(
+                    new LambdaQueryWrapper<UserTag>().eq(UserTag::getUserId, publisher.getId())
+            );
+            List<PostDetailVO.PublisherTagVO> publisherTags = new ArrayList<>();
+            for (UserTag ut : publisherUserTags) {
+                InterestTag tag = interestTagMapper.selectById(ut.getTagId());
+                if (tag != null && tag.getStatus() == 1) {
+                    PostDetailVO.PublisherTagVO tagVO = new PostDetailVO.PublisherTagVO();
+                    tagVO.setTagId(tag.getId());
+                    tagVO.setTagName(tag.getName());
+                    tagVO.setCategory(tag.getCategory());
+                    tagVO.setSelfLevel(ut.getSelfLevel());
+                    publisherTags.add(tagVO);
+                }
+            }
+            detailVO.setPublisherTags(publisherTags);
+        }
+
+        // 可评价用户列表：已出勤（ATTENDED）的参与者，供发布者评价
+        List<PostApply> attendedApplies = postApplyMapper.selectList(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .eq(PostApply::getStatus, ApplyStatus.ATTENDED)
+        );
+        // 批量查询可评价用户信息（避免每条一次 selectById）
+        Set<Long> attendeeIds = new HashSet<>();
+        for (PostApply apply : attendedApplies) {
+            if (apply.getApplicantId() != null) {
+                attendeeIds.add(apply.getApplicantId());
+            }
+        }
+        Map<Long, User> attendeeMap = attendeeIds.isEmpty()
+                ? Collections.emptyMap()
+                : toUserMap(userMapper.selectBatchIds(attendeeIds));
+        List<PostDetailVO.ApplyUserVO> reviewTargets = new ArrayList<>();
+        for (PostApply apply : attendedApplies) {
+            User attendee = apply.getApplicantId() != null ? attendeeMap.get(apply.getApplicantId()) : null;
+            if (attendee != null) {
+                PostDetailVO.ApplyUserVO vo = new PostDetailVO.ApplyUserVO();
+                vo.setUserId(attendee.getId());
+                vo.setNickname(attendee.getNickname());
+                vo.setAvatar(attendee.getAvatar());
+                vo.setCreditLevel(creditService.getCreditLevel(attendee.getCreditScore()));
+                reviewTargets.add(vo);
+            }
+        }
+        detailVO.setReviewTargets(reviewTargets);
+
+        return detailVO;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelPost(Long userId, Long postId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+
+        // 校验是发布者
+        if (!post.getPublisherId().equals(userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "只能取消自己发布的帖子");
+        }
+
+        // 状态机校验
+        PostStateMachine.checkTransition(post.getStatus(), PostStatus.CANCELLED);
+
+        // 更新状态
+        post.setStatus(PostStatus.CANCELLED);
+        postMapper.updateById(post);
+
+        // 联动（D-008）：取消所有未完结的报名（PENDING/APPROVED/WAITLIST），
+        // APPROVED 报名取消后 current_people -1，逐个通知且不扣分
+        List<PostApply> applies = postApplyMapper.selectList(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
+        );
+        for (PostApply apply : applies) {
+            if (ApplyStatus.APPROVED.equals(apply.getStatus())) {
+                postMapper.decrementCurrentPeople(postId);
+            }
+            apply.setStatus(ApplyStatus.CANCELLED);
+            apply.setHandleTime(LocalDateTime.now());
+            postApplyMapper.updateById(apply);
+            // 通知该用户：组局已取消
+            notificationService.send(apply.getApplicantId(), Notification.TYPE_POST_CANCEL,
+                    "组局已取消",
+                    "你参加的组局「" + post.getTitle() + "」已被取消",
+                    "/post/" + postId, postId);
+        }
+    }
+
+    @Override
+    public void incrementViewCount(Long postId, Long userId) {
+        // Redis去重：10分钟内同一用户只计一次
+        String key = VIEW_COUNT_KEY + postId + ":" + userId;
+        try {
+            Boolean isNew = redisTemplate.opsForValue().setIfAbsent(key, "1", VIEW_DEDUP_MINUTES, TimeUnit.MINUTES);
+            if (Boolean.TRUE.equals(isNew)) {
+                // 浏览量+1
+                Post post = postMapper.selectById(postId);
+                if (post != null) {
+                    post.setViewCount(post.getViewCount() + 1);
+                    postMapper.updateById(post);
+                }
+            }
+        } catch (Exception e) {
+            // Redis不可用，直接+1浏览量（不去重）
+            Post post = postMapper.selectById(postId);
+            if (post != null) {
+                post.setViewCount(post.getViewCount() + 1);
+                postMapper.updateById(post);
+            }
+        }
+    }
+
+    /** 批量查询 Map<id, User>（避免 N+1） */
+    private static Map<Long, User> toUserMap(List<User> users) {
+        Map<Long, User> map = new HashMap<>();
+        if (users != null) {
+            for (User u : users) {
+                if (u.getId() != null) {
+                    map.put(u.getId(), u);
+                }
+            }
+        }
+        return map;
+    }
+}

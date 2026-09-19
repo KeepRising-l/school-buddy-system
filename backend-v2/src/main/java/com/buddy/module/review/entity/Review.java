@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -43,6 +44,10 @@ public class Review {
 
     /** 回复时间 */
     private LocalDateTime replyTime;
+
+    /** 逻辑删除：0正常 1已删（D-007） */
+    @TableLogic
+    private Integer deleted;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
