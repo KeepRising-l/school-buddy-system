@@ -2,13 +2,33 @@ package com.buddy.module.user.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.CreditConstant;
+import com.buddy.common.constant.LevelTagCategories;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.jwt.JwtUtils;
 import com.buddy.common.result.ResultCode;
+import com.buddy.module.apply.dto.ApplyVO;
+import com.buddy.module.apply.entity.PostApply;
+import com.buddy.module.apply.mapper.PostApplyMapper;
 import com.buddy.module.auth.dto.request.LoginRequest;
 import com.buddy.module.auth.dto.request.RegisterRequest;
 import com.buddy.module.credit.service.CreditService;
+import com.buddy.module.post.dto.PostVO;
+import com.buddy.module.post.entity.Post;
+import com.buddy.module.post.mapper.PostMapper;
+import com.buddy.module.review.dto.ReviewVO;
+import com.buddy.module.review.entity.Review;
+import com.buddy.module.review.mapper.ReviewMapper;
+import com.buddy.module.tag.entity.InterestTag;
+import com.buddy.module.tag.entity.UserTag;
+import com.buddy.module.tag.mapper.InterestTagMapper;
+import com.buddy.module.tag.mapper.UserTagMapper;
+import com.buddy.module.user.dto.request.ProfileUpdateRequest;
+import com.buddy.module.user.dto.UserProfileVO;
+import com.buddy.module.user.dto.UserTagVO;
 import com.buddy.module.user.dto.UserVO;
 import com.buddy.module.user.entity.User;
 import com.buddy.module.user.mapper.UserMapper;
@@ -20,12 +40,17 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
- * 用户服务实现类
- * Demo 范围：注册 / 登录 / 本人资料；登录安全（Redis 失败计数）等价迁移，可验证 Redis 连通性
+ * 用户服务实现类（等价迁移自旧版）
  */
 @Slf4j
 @Service
@@ -35,13 +60,28 @@ public class UserServiceImpl implements UserService {
     private UserMapper userMapper;
 
     @Autowired
+    private UserTagMapper userTagMapper;
+
+    @Autowired
+    private ReviewMapper reviewMapper;
+
+    @Autowired
+    private InterestTagMapper interestTagMapper;
+
+    @Autowired
+    private PostMapper postMapper;
+
+    @Autowired
+    private PostApplyMapper postApplyMapper;
+
+    @Autowired
+    private CreditService creditService;
+
+    @Autowired
     private JwtUtils jwtUtils;
 
     @Autowired
     private StringRedisTemplate redisTemplate;
-
-    @Autowired
-    private CreditService creditService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -209,9 +249,261 @@ public class UserServiceImpl implements UserService {
         return convertToUserVO(user);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateProfile(Long userId, ProfileUpdateRequest request) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+
+        // 更新非空字段
+        if (StrUtil.isNotBlank(request.getNickname())) {
+            user.setNickname(request.getNickname());
+        }
+        if (StrUtil.isNotBlank(request.getAvatar())) {
+            user.setAvatar(request.getAvatar());
+        }
+        if (request.getSignature() != null) {
+            user.setSignature(request.getSignature());
+        }
+        if (StrUtil.isNotBlank(request.getCollege())) {
+            user.setCollege(request.getCollege());
+        }
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
+
+        userMapper.updateById(user);
+    }
+
+    @Override
+    public List<UserTagVO> getUserTags(Long userId) {
+        // 查询用户的标签关联
+        List<UserTag> userTags = userTagMapper.selectList(
+                new LambdaQueryWrapper<UserTag>().eq(UserTag::getUserId, userId)
+        );
+        if (userTags.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 构建 tagId -> selfLevel 映射
+        Map<Long, Integer> levelMap = userTags.stream()
+                .collect(Collectors.toMap(UserTag::getTagId, UserTag::getSelfLevel, (a, b) -> a));
+
+        // 查询标签详情，组装为 UserTagVO
+        List<InterestTag> tags = interestTagMapper.selectBatchIds(levelMap.keySet());
+        return tags.stream().map(tag -> {
+            UserTagVO vo = new UserTagVO();
+            vo.setId(tag.getId());
+            vo.setCategory(tag.getCategory());
+            vo.setName(tag.getName());
+            vo.setDescription(tag.getDescription());
+            vo.setSortOrder(tag.getSortOrder());
+            // 无段位概念的项目 selfLevel 置 0，避免前端误显示"青铜"默认值
+            boolean hasLevel = LevelTagCategories.contains(tag.getCategory());
+            vo.setHasLevel(hasLevel);
+            vo.setSelfLevel(hasLevel ? levelMap.getOrDefault(tag.getId(), 1) : 0);
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setUserTags(Long userId, List<Long> tagIds, List<Integer> levels) {
+        // 防御校验：重复 tagId 会导致唯一键冲突；不存在的 tagId 产生孤儿数据
+        Set<Long> dedup = new LinkedHashSet<>(tagIds);
+        if (dedup.size() != tagIds.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "标签不能重复");
+        }
+        if (levels == null || levels.size() != tagIds.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "标签与段位数量不一致");
+        }
+        List<InterestTag> validTags = interestTagMapper.selectList(
+                new LambdaQueryWrapper<InterestTag>()
+                        .in(InterestTag::getId, tagIds)
+                        .eq(InterestTag::getStatus, 1)
+        );
+        if (validTags.size() != tagIds.size()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "包含无效的标签");
+        }
+
+        // 先删除旧的关联
+        userTagMapper.delete(
+                new LambdaQueryWrapper<UserTag>().eq(UserTag::getUserId, userId)
+        );
+
+        // 批量插入新关联
+        for (int i = 0; i < tagIds.size(); i++) {
+            UserTag userTag = new UserTag();
+            userTag.setUserId(userId);
+            userTag.setTagId(tagIds.get(i));
+            userTag.setSelfLevel(levels.get(i));
+            userTagMapper.insert(userTag);
+        }
+    }
+
+    @Override
+    public IPage<PostVO> getMyPosts(Long userId, int page, int size, String status) {
+        LambdaQueryWrapper<Post> wrapper = new LambdaQueryWrapper<Post>()
+                .eq(Post::getPublisherId, userId)
+                .orderByDesc(Post::getCreatedTime);
+
+        if (StrUtil.isNotBlank(status)) {
+            wrapper.eq(Post::getStatus, status);
+        }
+
+        IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);
+
+        // 转换为PostVO
+        IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
+        voPage.setRecords(postPage.getRecords().stream()
+                .map(this::convertToPostVO)
+                .collect(Collectors.toList()));
+        return voPage;
+    }
+
+    @Override
+    public IPage<ApplyVO> getMyApplies(Long userId, int page, int size, String status) {
+        LambdaQueryWrapper<PostApply> wrapper = new LambdaQueryWrapper<PostApply>()
+                .eq(PostApply::getApplicantId, userId)
+                .orderByDesc(PostApply::getApplyTime);
+
+        if (StrUtil.isNotBlank(status)) {
+            wrapper.eq(PostApply::getStatus, status);
+        }
+
+        IPage<PostApply> applyPage = postApplyMapper.selectPage(new Page<>(page, size), wrapper);
+
+        // 转换为ApplyVO
+        IPage<ApplyVO> voPage = new Page<>(applyPage.getCurrent(), applyPage.getSize(), applyPage.getTotal());
+        voPage.setRecords(applyPage.getRecords().stream().map(apply -> {
+            ApplyVO vo = new ApplyVO();
+            vo.setId(apply.getId());
+            vo.setPostId(apply.getPostId());
+            vo.setApplicantId(apply.getApplicantId());
+            vo.setStatus(apply.getStatus());
+            vo.setApplyTime(apply.getApplyTime());
+            vo.setHandleTime(apply.getHandleTime());
+            vo.setRemark(apply.getRemark());
+
+            // 查询帖子标题
+            Post post = postMapper.selectById(apply.getPostId());
+            if (post != null) {
+                vo.setPostTitle(post.getTitle());
+            }
+
+            return vo;
+        }).collect(Collectors.toList()));
+
+        return voPage;
+    }
+
+    @Override
+    public UserProfileVO getUserProfile(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+
+        UserProfileVO vo = new UserProfileVO();
+        // 基本信息（不含手机号/学号，敏感信息脱敏）
+        vo.setId(user.getId());
+        vo.setNickname(user.getNickname());
+        vo.setAvatar(user.getAvatar());
+        vo.setSignature(user.getSignature());
+        vo.setCollege(user.getCollege());
+        vo.setGender(user.getGender());
+        vo.setCreditScore(user.getCreditScore());
+        vo.setCreditLevel(creditService.getCreditLevel(user.getCreditScore()));
+        vo.setCreditLabel(creditService.getCreditLabel(user.getCreditScore()));
+        vo.setIsLowCredit(creditService.isLowCredit(user.getCreditScore()));
+        vo.setProfilePrivacy(user.getProfilePrivacy() == null ? 0 : user.getProfilePrivacy());
+
+        // 兴趣标签（含段位）
+        vo.setTags(getUserTags(userId));
+
+        // 评价标签云统计
+        List<Review> reviews = reviewMapper.selectList(
+                new LambdaQueryWrapper<Review>().eq(Review::getTargetUserId, userId)
+        );
+        Map<String, Long> tagCounts = reviews.stream()
+                .filter(r -> r.getTag() != null && !r.getTag().isEmpty())
+                .map(r -> r.getTag().split(",")[0].trim())
+                .collect(Collectors.groupingBy(t -> t, Collectors.counting()));
+        List<UserProfileVO.TagStat> tagStats = tagCounts.entrySet().stream()
+                .map(e -> {
+                    UserProfileVO.TagStat stat = new UserProfileVO.TagStat();
+                    stat.setTag(e.getKey());
+                    stat.setCount(e.getValue());
+                    return stat;
+                })
+                .collect(Collectors.toList());
+        vo.setReviewTagStats(tagStats);
+
+        // 历史组局（发布 + 参加，最多20条；隐私隐藏时不返回）
+        if (vo.getProfilePrivacy() != 1) {
+            List<PostVO> historyPosts = new ArrayList<>();
+            List<Post> published = postMapper.selectList(
+                    new LambdaQueryWrapper<Post>()
+                            .eq(Post::getPublisherId, userId)
+                            .orderByDesc(Post::getCreatedTime)
+                            .last("LIMIT 20")
+            );
+            historyPosts.addAll(published.stream().map(this::convertToPostVO).collect(Collectors.toList()));
+            // 参加过的组局（APPROVED/ATTENDED/NOSHOW 等已加入的）
+            List<PostApply> joinedApplies = postApplyMapper.selectList(
+                    new LambdaQueryWrapper<PostApply>()
+                            .eq(PostApply::getApplicantId, userId)
+                            .in(PostApply::getStatus, ApplyStatus.APPROVED, ApplyStatus.ATTENDED, ApplyStatus.NOSHOW)
+                            .orderByDesc(PostApply::getApplyTime)
+                            .last("LIMIT 20")
+            );
+            Set<Long> publishedIds = published.stream().map(Post::getId).collect(Collectors.toSet());
+            for (PostApply apply : joinedApplies) {
+                if (publishedIds.contains(apply.getPostId())) {
+                    continue; // 已包含的发布帖不重复
+                }
+                Post joined = postMapper.selectById(apply.getPostId());
+                if (joined != null) {
+                    historyPosts.add(convertToPostVO(joined));
+                }
+            }
+            // 按创建时间倒序取前20
+            historyPosts.sort((a, b) -> {
+                if (a.getCreatedTime() == null || b.getCreatedTime() == null) return 0;
+                return b.getCreatedTime().compareTo(a.getCreatedTime());
+            });
+            vo.setHistoryPosts(historyPosts.stream().limit(20).collect(Collectors.toList()));
+        }
+
+        // 收到的评价（最多10条）
+        List<ReviewVO> reviewVOs = reviews.stream()
+                .sorted((a, b) -> b.getCreatedTime().compareTo(a.getCreatedTime()))
+                .limit(10)
+                .map(this::convertToReviewVO)
+                .collect(Collectors.toList());
+        vo.setRecentReviews(reviewVOs);
+
+        return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setProfilePrivacy(Long userId, Integer privacy) {
+        if (privacy == null || (privacy != 0 && privacy != 1)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "隐私设置不合法");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        user.setProfilePrivacy(privacy);
+        userMapper.updateById(user);
+    }
+
     /**
      * 将User实体转换为UserVO
-     * Demo 范围：postCount/applyCount 待 post/apply 模块迁移后接入
      */
     private UserVO convertToUserVO(User user) {
         UserVO vo = new UserVO();
@@ -229,6 +521,74 @@ public class UserServiceImpl implements UserService {
         vo.setCreditLabel(creditService.getCreditLabel(user.getCreditScore()));
         vo.setStatus(user.getStatus());
         vo.setCreatedTime(user.getCreatedTime());
+        // 我的页统计
+        vo.setPostCount(postMapper.selectCount(
+                new LambdaQueryWrapper<Post>().eq(Post::getPublisherId, user.getId())
+        ));
+        vo.setApplyCount(postApplyMapper.selectCount(
+                new LambdaQueryWrapper<PostApply>().eq(PostApply::getApplicantId, user.getId())
+        ));
+        return vo;
+    }
+
+    /**
+     * 将Post实体转换为PostVO（含发布者信息）
+     */
+    private PostVO convertToPostVO(Post post) {
+        PostVO vo = new PostVO();
+        vo.setId(post.getId());
+        vo.setTitle(post.getTitle());
+        vo.setCategory(post.getCategory());
+        vo.setTagIds(post.getTagIds());
+        vo.setStartTime(post.getStartTime());
+        vo.setEndTime(post.getEndTime());
+        vo.setLocation(post.getLocation());
+        vo.setMaxPeople(post.getMaxPeople());
+        vo.setCurrentPeople(post.getCurrentPeople());
+        vo.setStatus(post.getStatus());
+        vo.setViewCount(post.getViewCount());
+        vo.setPublisherId(post.getPublisherId());
+        vo.setCreatedTime(post.getCreatedTime());
+        vo.setIsAuditPass(post.getIsAuditPass());
+        vo.setRequireLevel(post.getRequireLevel());
+        vo.setRequireGender(post.getRequireGender());
+
+        // 查询发布者信息
+        User publisher = userMapper.selectById(post.getPublisherId());
+        if (publisher != null) {
+            vo.setPublisherNickname(publisher.getNickname());
+            vo.setPublisherAvatar(publisher.getAvatar());
+            vo.setPublisherCreditLevel(creditService.getCreditLevel(publisher.getCreditScore()));
+        }
+        return vo;
+    }
+
+    /**
+     * 评价实体转VO
+     */
+    private ReviewVO convertToReviewVO(Review review) {
+        ReviewVO vo = new ReviewVO();
+        vo.setId(review.getId());
+        vo.setPostId(review.getPostId());
+        vo.setReviewerId(review.getReviewerId());
+        vo.setTargetUserId(review.getTargetUserId());
+        vo.setRating(review.getRating());
+        vo.setTag(review.getTag());
+        vo.setContent(review.getContent());
+        vo.setReplyContent(review.getReplyContent());
+        vo.setReplyTime(review.getReplyTime());
+        vo.setCreatedTime(review.getCreatedTime());
+
+        // 评价人昵称
+        User reviewer = userMapper.selectById(review.getReviewerId());
+        if (reviewer != null) {
+            vo.setReviewerNickname(reviewer.getNickname());
+        }
+        // 帖子标题
+        Post post = postMapper.selectById(review.getPostId());
+        if (post != null) {
+            vo.setPostTitle(post.getTitle());
+        }
         return vo;
     }
 }
