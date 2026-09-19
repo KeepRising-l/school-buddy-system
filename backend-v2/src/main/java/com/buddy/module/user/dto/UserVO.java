@@ -30,10 +30,10 @@ public class UserVO {
 
     private Integer creditScore;
 
-    /** 计算后的星级 1-5（Demo 暂缺：待 credit 模块迁移后接入） */
+    /** 计算后的星级 1-5 */
     private Integer creditLevel;
 
-    /** 信誉标签：靠谱队友/优质队友/...（Demo 暂缺：待 credit 模块迁移后接入） */
+    /** 信誉标签：靠谱队友/优质队友/... */
     private String creditLabel;
 
     private Integer status;

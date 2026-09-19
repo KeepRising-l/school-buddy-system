@@ -1,6 +1,7 @@
 package com.buddy;
 
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -9,7 +10,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 包结构：按业务功能模块划分（module/auth、module/user、module/post...）
  */
 @SpringBootApplication
-@MapperScan({"com.buddy.module.user.mapper", "com.buddy.module.notification.mapper"})
+@EnableScheduling
+@MapperScan({"com.buddy.module.user.mapper", "com.buddy.module.notification.mapper", "com.buddy.module.credit.mapper", "com.buddy.module.review.mapper"})
 public class BuddyApplication {
 
     public static void main(String[] args) {

@@ -2,11 +2,13 @@ package com.buddy.module.user.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.jwt.JwtUtils;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.auth.dto.request.LoginRequest;
 import com.buddy.module.auth.dto.request.RegisterRequest;
+import com.buddy.module.credit.service.CreditService;
 import com.buddy.module.user.dto.UserVO;
 import com.buddy.module.user.entity.User;
 import com.buddy.module.user.mapper.UserMapper;
@@ -38,6 +40,9 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Autowired
+    private CreditService creditService;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /** 登录失败计数缓存前缀 */
@@ -46,9 +51,6 @@ public class UserServiceImpl implements UserService {
     private static final int MAX_LOGIN_FAIL = 5;
     /** 锁定时间（分钟） */
     private static final int LOCK_MINUTES = 30;
-
-    /** 信誉分初始值（100，等价迁移；待 credit 模块迁移后改用 CreditConstant） */
-    private static final int INITIAL_CREDIT_SCORE = 100;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -118,7 +120,7 @@ public class UserServiceImpl implements UserService {
         // BCrypt加密密码
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNickname(request.getRealName());
-        user.setCreditScore(INITIAL_CREDIT_SCORE);
+        user.setCreditScore(CreditConstant.INITIAL_SCORE);
         user.setStatus(1);
         user.setIsAdmin(0);
         user.setGender(0);
@@ -209,7 +211,7 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 将User实体转换为UserVO
-     * Demo 范围：postCount/applyCount 与 creditLevel/creditLabel 待 post/credit 模块迁移后接入
+     * Demo 范围：postCount/applyCount 待 post/apply 模块迁移后接入
      */
     private UserVO convertToUserVO(User user) {
         UserVO vo = new UserVO();
@@ -223,6 +225,8 @@ public class UserServiceImpl implements UserService {
         vo.setCollege(user.getCollege());
         vo.setGender(user.getGender());
         vo.setCreditScore(user.getCreditScore());
+        vo.setCreditLevel(creditService.getCreditLevel(user.getCreditScore()));
+        vo.setCreditLabel(creditService.getCreditLabel(user.getCreditScore()));
         vo.setStatus(user.getStatus());
         vo.setCreatedTime(user.getCreatedTime());
         return vo;
