@@ -1,0 +1,159 @@
+package com.buddy.module.review.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.buddy.common.constant.ApplyStatus;
+import com.buddy.common.constant.PostStatus;
+import com.buddy.common.exception.BusinessException;
+import com.buddy.common.result.ResultCode;
+import com.buddy.module.apply.entity.PostApply;
+import com.buddy.module.apply.mapper.PostApplyMapper;
+import com.buddy.module.post.entity.Post;
+import com.buddy.module.post.mapper.PostMapper;
+import com.buddy.module.review.dto.request.ReviewRequest;
+import com.buddy.module.review.entity.Review;
+import com.buddy.module.review.mapper.ReviewMapper;
+import com.buddy.module.review.service.ReviewService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+
+/**
+ * 评价服务实现类（等价迁移自旧版）
+ * 说明：评价对信誉分的影响由每日重算任务统一生效（CreditCalculateTask），与旧版一致
+ */
+@Service
+public class ReviewServiceImpl implements ReviewService {
+
+    /** 评价窗口期（天） */
+    private static final int REVIEW_WINDOW_DAYS = 7;
+
+    @Autowired
+    private ReviewMapper reviewMapper;
+
+    @Autowired
+    private PostMapper postMapper;
+
+    @Autowired
+    private PostApplyMapper postApplyMapper;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void submitReview(Long reviewerId, ReviewRequest request) {
+        // 校验帖子状态为FINISHED
+        Post post = postMapper.selectById(request.getPostId());
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        if (!PostStatus.FINISHED.equals(post.getStatus())) {
+            throw new BusinessException("只能评价已结束的活动");
+        }
+
+        // 校验评价人是否参与了该活动（是发布者或已出勤的报名者）
+        boolean isParticipant = post.getPublisherId().equals(reviewerId);
+        if (!isParticipant) {
+            Long attendedCount = postApplyMapper.selectCount(
+                    new LambdaQueryWrapper<PostApply>()
+                            .eq(PostApply::getPostId, request.getPostId())
+                            .eq(PostApply::getApplicantId, reviewerId)
+                            .eq(PostApply::getStatus, ApplyStatus.ATTENDED)
+            );
+            if (attendedCount == 0) {
+                throw new BusinessException("您未参加该活动，无法评价");
+            }
+        }
+
+        // 校验被评价用户也参与了该活动（发布者或已出勤的报名者）
+        boolean targetIsParticipant = post.getPublisherId().equals(request.getTargetUserId());
+        if (!targetIsParticipant) {
+            Long targetAttendedCount = postApplyMapper.selectCount(
+                    new LambdaQueryWrapper<PostApply>()
+                            .eq(PostApply::getPostId, request.getPostId())
+                            .eq(PostApply::getApplicantId, request.getTargetUserId())
+                            .eq(PostApply::getStatus, ApplyStatus.ATTENDED)
+            );
+            if (targetAttendedCount == 0) {
+                throw new BusinessException("被评价用户未参加该活动");
+            }
+        }
+
+        // 校验不能评价自己
+        if (reviewerId.equals(request.getTargetUserId())) {
+            throw new BusinessException("不能评价自己");
+        }
+
+        // 校验未重复评价
+        Long reviewCount = reviewMapper.selectCount(
+                new LambdaQueryWrapper<Review>()
+                        .eq(Review::getPostId, request.getPostId())
+                        .eq(Review::getReviewerId, reviewerId)
+                        .eq(Review::getTargetUserId, request.getTargetUserId())
+        );
+        if (reviewCount > 0) {
+            throw new BusinessException(ResultCode.REVIEW_DUPLICATE);
+        }
+
+        // 校验7天评价窗口（从活动结束时间 endTime 算起），
+        // 用精确时间比较（原 ChronoUnit.DAYS 按整天截断，窗口实际多出近1天）
+        if (post.getEndTime() != null) {
+            LocalDateTime deadline = post.getEndTime().plusDays(REVIEW_WINDOW_DAYS);
+            if (LocalDateTime.now().isAfter(deadline)) {
+                // 报错带上具体截止时间，用户才知道窗口何时关闭
+                throw new BusinessException(ResultCode.REVIEW_WINDOW_EXPIRED,
+                        "评价窗口已关闭：活动结束后" + REVIEW_WINDOW_DAYS + "天内可评价（截止 " +
+                                deadline.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "）");
+            }
+        }
+
+        // 插入评价
+        Review review = new Review();
+        review.setPostId(request.getPostId());
+        review.setReviewerId(reviewerId);
+        review.setTargetUserId(request.getTargetUserId());
+        review.setRating(request.getRating());
+        review.setTag(request.getTag());
+        review.setContent(request.getContent());
+
+        reviewMapper.insert(review);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void replyReview(Long targetUserId, Long reviewId, String content) {
+        if (content == null || content.trim().isEmpty()) {
+            throw new BusinessException("回复内容不能为空");
+        }
+        Review review = reviewMapper.selectById(reviewId);
+        if (review == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "评价不存在");
+        }
+        // 仅被评价人本人可以回复自己收到的评价
+        if (!review.getTargetUserId().equals(targetUserId)) {
+            throw new BusinessException("只能回复发给自己的评价");
+        }
+        review.setReplyContent(content.trim());
+        review.setReplyTime(LocalDateTime.now());
+        reviewMapper.updateById(review);
+    }
+
+    @Override
+    public List<Review> getPostReviews(Long postId) {
+        return reviewMapper.selectList(
+                new LambdaQueryWrapper<Review>()
+                        .eq(Review::getPostId, postId)
+                        .orderByDesc(Review::getCreatedTime)
+        );
+    }
+
+    @Override
+    public List<Review> getUserReviews(Long targetUserId) {
+        return reviewMapper.selectList(
+                new LambdaQueryWrapper<Review>()
+                        .eq(Review::getTargetUserId, targetUserId)
+                        .orderByDesc(Review::getCreatedTime)
+        );
+    }
+}
