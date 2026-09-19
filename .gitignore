@@ -1,6 +1,6 @@
 # ===================== 鏁忔劅閰嶇疆 =====================
 # 鏈湴寮�鍙戦厤缃紙鍚湡瀹炴暟鎹簱瀵嗙爜 / JWT 瀵嗛挜锛夛紝绂佹鎻愪氦
-backend/src/main/resources/application-local.yml
+backend-legacy/src/main/resources/application-local.yml
 
 # ===================== IDE =====================
 .idea/
@@ -9,7 +9,7 @@ backend/src/main/resources/application-local.yml
 *.swp
 
 # ===================== 鍚庣 (Java) =====================
-backend/target/
+backend-legacy/target/
 *.class
 *.jar
 *.war
@@ -25,3 +25,7 @@ uploads/
 # ===================== 鎿嶄綔绯荤粺 =====================
 .DS_Store
 Thumbs.db
+
+# Redis 本地持久化文件（误入仓库根目录）
+dump.rdb
+*.rdb

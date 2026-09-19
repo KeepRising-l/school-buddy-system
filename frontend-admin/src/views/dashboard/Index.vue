@@ -45,7 +45,7 @@
               <el-icon :size="28"><Trophy /></el-icon>
             </div>
             <div class="stat-info">
-              <el-statistic title="成功组局数" :value="overview.successCount" />
+              <el-statistic title="成功组局数" :value="overview.successMatches" />
             </div>
           </div>
         </el-card>
@@ -67,12 +67,12 @@ import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import { getStatsOverview, getCategoryTop5 } from '@/api/admin'
 
-// 统计概览数据
+// 统计概览数据（字段名与后端 StatsVO 对齐：successMatches）
 const overview = reactive({
   totalUsers: 0,
   totalPosts: 0,
   todayPosts: 0,
-  successCount: 0
+  successMatches: 0
 })
 
 // 饼图DOM引用
