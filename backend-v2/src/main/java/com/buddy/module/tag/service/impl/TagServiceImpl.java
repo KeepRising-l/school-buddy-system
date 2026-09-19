@@ -21,6 +21,28 @@ public class TagServiceImpl implements TagService {
     private InterestTagMapper interestTagMapper;
 
     @Override
+    public InterestTag addTag(InterestTag tag) {
+        tag.setStatus(1);
+        interestTagMapper.insert(tag);
+        return tag;
+    }
+
+    @Override
+    public InterestTag updateTag(InterestTag tag) {
+        interestTagMapper.updateById(tag);
+        return tag;
+    }
+
+    @Override
+    public void disableTag(Long tagId) {
+        InterestTag tag = interestTagMapper.selectById(tagId);
+        if (tag != null) {
+            tag.setStatus(0);
+            interestTagMapper.updateById(tag);
+        }
+    }
+
+    @Override
     public List<InterestTag> getAllTags() {
         List<InterestTag> tags = interestTagMapper.selectList(
                 new LambdaQueryWrapper<InterestTag>()

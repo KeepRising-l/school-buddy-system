@@ -3,10 +3,14 @@ package com.buddy.module.report.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
+import com.buddy.module.notification.entity.Notification;
+import com.buddy.module.notification.service.NotificationService;
 import com.buddy.module.post.entity.Post;
 import com.buddy.module.post.mapper.PostMapper;
+import com.buddy.module.post.service.AdminPostService;
 import com.buddy.module.report.dto.ReportVO;
 import com.buddy.module.report.entity.Report;
 import com.buddy.module.report.mapper.ReportMapper;
@@ -26,13 +30,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 举报服务实现类（等价迁移自旧版，S7 范围：用户端提交与进度查询）
+ * 举报服务实现类（等价迁移自旧版）
  */
 @Service
 public class ReportServiceImpl implements ReportService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(ReportServiceImpl.class);
+
     /** 24小时重复举报窗口（毫秒） */
     private static final long DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000L;
+
+    /** 自动风控阈值：同一对象累计有效举报次数 */
+    private static final int AUTO_BAN_THRESHOLD = 3;
 
     @Autowired
     private ReportMapper reportMapper;
@@ -42,6 +52,12 @@ public class ReportServiceImpl implements ReportService {
 
     @Autowired
     private PostMapper postMapper;
+
+    @Autowired
+    private AdminPostService adminPostService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -104,6 +120,149 @@ public class ReportServiceImpl implements ReportService {
                         .orderByDesc(Report::getCreatedTime)
         );
         return convertPage(reportPage);
+    }
+
+    @Override
+    public IPage<ReportVO> getReportList(int page, int size, Integer status) {
+        LambdaQueryWrapper<Report> wrapper = new LambdaQueryWrapper<>();
+        if (status != null) {
+            wrapper.eq(Report::getStatus, status);
+        }
+        wrapper.orderByDesc(Report::getCreatedTime);
+        IPage<Report> reportPage = reportMapper.selectPage(new Page<>(page, size), wrapper);
+        return convertPage(reportPage);
+    }
+
+    @Override
+    public ReportVO getReportDetail(Long reportId) {
+        Report report = reportMapper.selectById(reportId);
+        if (report == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "举报不存在");
+        }
+        return convertToVO(report);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void handle(Long adminId, Long reportId, boolean valid, String remark) {
+        Report report = reportMapper.selectById(reportId);
+        if (report == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "举报不存在");
+        }
+        if (report.getStatus() != Report.STATUS_PENDING) {
+            throw new BusinessException("该举报已处理");
+        }
+
+        // 更新举报状态
+        report.setStatus(valid ? Report.STATUS_VALID : Report.STATUS_INVALID);
+        report.setHandleBy(adminId);
+        report.setHandleTime(LocalDateTime.now());
+        report.setHandleRemark(remark);
+        reportMapper.updateById(report);
+
+        // 有效举报：联动处理
+        if (valid) {
+            String targetDesc;
+            if (Report.TARGET_POST.equals(report.getTargetType())) {
+                // 下架帖子（复用 takedownPost：级联取消未完结报名+恢复人数+通知报名用户）
+                Post post = postMapper.selectById(report.getTargetId());
+                if (post != null && !PostStatus.CANCELLED.equals(post.getStatus())) {
+                    adminPostService.takedownPost(report.getTargetId());
+                    // 通知发布者：帖子因违规被下架
+                    notificationService.send(post.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
+                            "帖子已被下架",
+                            "你的组局「" + post.getTitle() + "」因违规被下架，如有疑问请联系管理员",
+                            "/post/" + post.getId(), post.getId());
+                    targetDesc = post.getTitle();
+                } else {
+                    targetDesc = "帖子#" + report.getTargetId();
+                }
+            } else {
+                // 封禁用户
+                User user = userMapper.selectById(report.getTargetId());
+                if (user != null && user.getStatus() == 1) {
+                    user.setStatus(0);
+                    userMapper.updateById(user);
+                    // 通知被封禁用户
+                    notificationService.send(user.getId(), Notification.TYPE_SYSTEM,
+                            "账号已被封禁",
+                            "你的账号因违规行为被封禁，如有疑问请联系管理员",
+                            null, null);
+                    targetDesc = user.getNickname();
+                } else {
+                    targetDesc = "用户#" + report.getTargetId();
+                }
+            }
+
+            // 自动风控：同一对象累计3次有效举报触发兜底处置。
+            // 单次有效举报已即时下架/封禁，此处对"多次违规"对象追加风控确认：
+            // 若对象仍存活则再次处置并追加警告通知
+            Long validCount = reportMapper.selectCount(
+                    new LambdaQueryWrapper<Report>()
+                            .eq(Report::getTargetType, report.getTargetType())
+                            .eq(Report::getTargetId, report.getTargetId())
+                            .eq(Report::getStatus, Report.STATUS_VALID)
+            );
+            if (validCount >= AUTO_BAN_THRESHOLD) {
+                log.warn("自动风控触发：对象 {}-{} 有效举报已达 {} 次", report.getTargetType(), report.getTargetId(), validCount);
+                if (Report.TARGET_POST.equals(report.getTargetType())) {
+                    Post targetPost = postMapper.selectById(report.getTargetId());
+                    if (targetPost != null && !PostStatus.CANCELLED.equals(targetPost.getStatus())) {
+                        adminPostService.takedownPost(targetPost.getId());
+                        notificationService.send(targetPost.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
+                                "多次违规，组局已被下架",
+                                "你的组局「" + targetPost.getTitle() + "」因多次被举报核实违规，已被系统自动下架",
+                                "/post/" + targetPost.getId(), targetPost.getId());
+                    }
+                } else {
+                    User targetUser = userMapper.selectById(report.getTargetId());
+                    if (targetUser != null && targetUser.getStatus() == 1) {
+                        targetUser.setStatus(0);
+                        userMapper.updateById(targetUser);
+                        notificationService.send(targetUser.getId(), Notification.TYPE_SYSTEM,
+                                "多次违规，账号已被封禁",
+                                "你的账号因多次违规行为已被系统自动封禁，如有疑问请联系管理员",
+                                null, null);
+                    }
+                }
+            }
+        }
+
+        // 通知举报人处理结果
+        String resultText = valid ? "举报已受理，感谢你的反馈" : "举报经核实不成立";
+        notificationService.send(report.getReporterId(), Notification.TYPE_SYSTEM,
+                "举报处理结果",
+                resultText,
+                null, null);
+    }
+
+    /**
+     * 实体转VO（单条，详情页使用）
+     */
+    private ReportVO convertToVO(Report report) {
+        ReportVO vo = baseReportVO(report);
+        User reporter = report.getReporterId() != null ? userMapper.selectById(report.getReporterId()) : null;
+        if (reporter != null) {
+            vo.setReporterNickname(reporter.getNickname());
+        }
+        if (report.getHandleBy() != null) {
+            User handler = userMapper.selectById(report.getHandleBy());
+            if (handler != null) {
+                vo.setHandleByName(handler.getNickname());
+            }
+        }
+        if (Report.TARGET_POST.equals(report.getTargetType())) {
+            Post post = report.getTargetId() != null ? postMapper.selectById(report.getTargetId()) : null;
+            if (post != null) {
+                vo.setTargetTitle(post.getTitle());
+            }
+        } else if (report.getTargetId() != null) {
+            User user = userMapper.selectById(report.getTargetId());
+            if (user != null) {
+                vo.setTargetTitle(user.getNickname());
+            }
+        }
+        return vo;
     }
 
     /**
