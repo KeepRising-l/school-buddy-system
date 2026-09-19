@@ -1,6 +1,6 @@
 # ===================== 敏感配置 =====================
 # 本地开发配置（含真实数据库密码 / JWT 密钥），禁止提交
-backend/src/main/resources/application-local.yml
+backend-legacy/src/main/resources/application-local.yml
 
 # ===================== IDE =====================
 .idea/
@@ -9,7 +9,7 @@ backend/src/main/resources/application-local.yml
 *.swp
 
 # ===================== 后端 (Java) =====================
-backend/target/
+backend-legacy/target/
 *.class
 *.jar
 *.war

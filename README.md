@@ -2,14 +2,7 @@
 
 一个面向高校学生的**兴趣搭子组局平台**：用户可以发布组局（球类 / 电竞 / 桌游 / 跑步 / 健身 / 学习等），寻找志同道合的伙伴一起参与，并通过评价与信誉分机制维护组局质量。
 
-> **🆕 重构版后端 `backend-v2/`（2026-09）**：Java 17 + Spring Boot 3.3.5 重写完成（S0~S9 全切片），功能与旧版 `backend/` 等价，接口路径不变、前端零改动，另有 3 处增强：逻辑删除+级联（D-007）、取消组局自动通知不扣分（D-008）、通知 7 类（D-011）。
-> 启动方式与旧版相同，仅 JDK 要求不同：
-> ```bash
-> # 前置：JDK 17（旧版 backend 用 JDK 8）；MySQL/Redis 准备步骤与下文一致
-> cd backend-v2
-> mvn spring-boot:run
-> ```
-> 详细重构记录见 `AI-Dev-Workflow/`（需求/技术设计/开发计划三份基线 + 切片进度看板）。
+> **📦 当前交付物为 `backend-v2/`（2026-09 重构完成）**：Java 17 + Spring Boot 3.3.5，功能与老版等价、接口路径不变、前端零改动，另有增强：逻辑删除+级联（D-007）、取消组局自动通知不扣分（D-008）、通知 7 类（D-011）、55 例单元测试。老版已归档至 `backend-legacy/`（Java 8 + Boot 2.7，仅供追溯）。重构全过程见 `AI-Dev-Workflow/`。
 
 本文件是面向**第一次接触本项目的小白**的启动指南。更详细的分步骤教程（含依赖安装、常见报错排查）见 **`教学文档/00-新手小白从零启动教程.md`**。
 
@@ -19,7 +12,7 @@
 
 | 部分 | 技术 | 端口 | 作用 |
 |------|------|------|------|
-| `backend/` 后端 | Java + Spring Boot | **8080** | 提供所有接口（登录、发帖、报名、评价…） |
+| `backend-v2/` 后端（当前交付物） | Java 17 + Spring Boot 3.3.5 | **8080** | 提供所有接口（登录、发帖、报名、评价…） |
 | `frontend-h5/` H5 用户端 | Vue3 + Vant | **3000** | 学生用的手机网页 |
 | `frontend-admin/` 管理端 | Vue3 + Element Plus | **3001** | 管理员用的电脑后台 |
 | MySQL | 数据库 | 3306 | 存所有数据 |
@@ -33,7 +26,7 @@
 
 | 软件 | 推荐版本 | 检查命令 |
 |------|---------|---------|
-| **JDK** | **1.8（Java 8）** | `java -version` |
+| **JDK** | **17（LTS）** | `java -version` |
 | **Maven** | **3.6 及以上（3.6.3+）** | `mvn -version` |
 | **MySQL** | **8.0** | 安装时记住 root 密码 |
 | **Redis** | **5.0（Windows 版）** | 见第 4 步 |
@@ -98,10 +91,10 @@
 
 方式一（推荐，命令行）：
 ```bash
-cd backend
+cd backend-v2
 mvn spring-boot:run
 ```
-方式二（任意 IDE，如 IntelliJ IDEA）：直接运行 `backend` 下的主启动类。
+方式二（任意 IDE，如 IntelliJ IDEA）：直接运行 `backend-v2` 下的主启动类。
 
 看到类似 `Tomcat started on port(s): 8080` 即成功，**这个窗口也先别关**。
 
@@ -153,7 +146,7 @@ npm run dev
 |------|-----------|
 | 后端报数据库连接被拒 | 第 3 步密码填错，或第 4 步没导入数据库 |
 | 登录报「系统繁忙」/「无法连接 Redis」 | Redis 没启动，双击 `redis-server.exe`（第 5 步） |
-| 后端启动失败 | JDK 不是 1.8，或 Maven 没配环境变量，重开后重试 |
+| 后端启动失败 | JDK 不是 17，或 Maven 没配环境变量，重开后重试 |
 | `node` / `npm` 不是内部命令 | Node 没装好或没配 Path，装完重开终端 |
 | `npm install` 卡住不动 | 配国内镜像：`npm config set registry https://registry.npmmirror.com` 再重试 |
 | Navicat 运行 SQL 报 `Unknown database` | 说明没用 `init-all.sql`（该脚本内含建库）；确认选的是这个文件 |
@@ -166,11 +159,13 @@ npm run dev
 
 ```
 school-buddy-system/
-├─ backend/          # Spring Boot 后端（端口 8080）
+├─ backend-v2/       # Spring Boot 3 后端（当前交付物，端口 8080，Java 17）
+├─ backend-legacy/   # 老版后端归档（Java 8 + Boot 2.7，仅供追溯，勿启动）
 ├─ frontend-h5/      # H5 用户端（端口 3000）
 ├─ frontend-admin/   # 管理后台（端口 3001）
 ├─ database/         # 建表脚本 + 测试数据（init-all.sql 一站式导入）
-└─ docs/             # 需求 / 设计 / 开发文档
+├─ docs/             # 需求 / 设计 / 开发文档
+└─ AI-Dev-Workflow/  # 重构流程文档（需求/技术设计/开发计划基线）
 教学文档/             # 分步骤新手教程（含安装、排错）
 ```
 
