@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
@@ -155,7 +156,7 @@ class ReportServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已被处理");
         // 状态转换失败时不得下架/封禁/通知
-        verify(adminPostService, never()).takedownPost(any());
+        verify(adminPostService, never()).takedownPost(any(), any());
         verify(notificationService, never()).send(any(), any(), any(), any(), any(), any());
     }
 
@@ -166,13 +167,13 @@ class ReportServiceImplTest {
 
         reportService.handle(ADMIN_ID, REPORT_ID, false, "证据不足");
 
-        verify(adminPostService, never()).takedownPost(any());
+        verify(adminPostService, never()).takedownPost(any(), any());
         verify(notificationService).send(eq(REPORTER_ID), eq(Notification.TYPE_SYSTEM),
                 eq("举报处理结果"), any(), isNull(), isNull());
     }
 
     @Test
-    void handleValidTakesDownPostAndNotifiesBoth() {
+    void handleValidTakesDownPostAndNotifiesReporter() {
         when(reportMapper.selectById(REPORT_ID)).thenReturn(report(Report.STATUS_PENDING));
         when(reportMapper.update(isNull(), any())).thenReturn(1);
         Post post = new Post();
@@ -185,9 +186,8 @@ class ReportServiceImplTest {
 
         reportService.handle(ADMIN_ID, REPORT_ID, true, "违规属实");
 
-        verify(adminPostService).takedownPost(TARGET_ID);
-        verify(notificationService).send(eq(PUBLISHER_ID), eq(Notification.TYPE_POST_TAKEDOWN),
-                any(), any(), any(), eq(TARGET_ID));
+        // 下架走统一入口并附带原因；发布者通知由 takedownPost 内部负责（断言见 AdminPostServiceImplTest）
+        verify(adminPostService).takedownPost(eq(TARGET_ID), contains("举报"));
         verify(notificationService).send(eq(REPORTER_ID), eq(Notification.TYPE_SYSTEM),
                 eq("举报处理结果"), any(), isNull(), isNull());
     }

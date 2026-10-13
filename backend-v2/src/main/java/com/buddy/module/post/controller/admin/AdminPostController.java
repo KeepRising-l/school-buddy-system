@@ -44,12 +44,14 @@ public class AdminPostController {
     }
 
     /**
-     * 下架帖子
+     * 下架帖子（body 可选：{reason: "下架原因"}，原因会随通知发送给发布者）
      */
     @RequireAdmin
     @PostMapping("/takedown/{id}")
-    public R<Void> takedownPost(@PathVariable Long id) {
-        adminPostService.takedownPost(id);
+    public R<Void> takedownPost(@PathVariable Long id,
+                                @RequestBody(required = false) Map<String, Object> body) {
+        String reason = body == null ? null : (String) body.get("reason");
+        adminPostService.takedownPost(id, reason);
         return R.ok();
     }
 

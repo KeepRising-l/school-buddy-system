@@ -87,7 +87,7 @@ public class AdminPostServiceImpl implements AdminPostService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void takedownPost(Long postId) {
+    public void takedownPost(Long postId, String reason) {
         Post post = postMapper.selectById(postId);
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
@@ -104,6 +104,14 @@ public class AdminPostServiceImpl implements AdminPostService {
 
         // 帖子集合已变化：让推荐列表缓存立即失效
         cacheEpoch.bump();
+
+        // 通知发布者：下架不能"悄悄发生"——帖子从广场消失必须让当事人知道（含原因，若有）。
+        // 注意：发布者通知与报名者通知都以"实际下架成功"为前提（上面 updated==0 已提前返回）
+        String publisherContent = StrUtil.isNotBlank(reason)
+                ? "你的组局「" + post.getTitle() + "」已被管理员下架，原因：" + reason
+                : "你的组局「" + post.getTitle() + "」已被管理员下架";
+        notificationService.send(post.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
+                "组局已被下架", publisherContent, "/post/" + postId, postId);
 
         // 联动：取消该帖所有未完结报名（否则报名记录悬挂"已通过"，用户卡死）
         List<PostApply> applies = postApplyMapper.selectList(

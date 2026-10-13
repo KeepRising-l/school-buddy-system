@@ -210,7 +210,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                         .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL, PostStatus.ONGOING)
         );
         for (Post post : activePosts) {
-            adminPostService.takedownPost(post.getId());
+            adminPostService.takedownPost(post.getId(), "发布者账号因违规被封禁");
         }
     }
 

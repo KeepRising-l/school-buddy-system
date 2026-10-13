@@ -27,6 +27,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.when;
 class AdminPostServiceImplTest {
 
     private static final Long POST_ID = 1L;
+    private static final Long PUBLISHER_ID = 3L;
     private static final Long APPLICANT_ID = 8L;
 
     @Mock
@@ -84,6 +86,7 @@ class AdminPostServiceImplTest {
         post.setId(POST_ID);
         post.setTitle("被举报的组局");
         post.setStatus(status);
+        post.setPublisherId(PUBLISHER_ID);
         return post;
     }
 
@@ -92,7 +95,7 @@ class AdminPostServiceImplTest {
         when(postMapper.selectById(POST_ID)).thenReturn(post("CANCELLED"));
         when(postMapper.update(isNull(), any())).thenReturn(0); // 条件更新未命中：已被并发下架
 
-        adminPostService.takedownPost(POST_ID);
+        adminPostService.takedownPost(POST_ID, "违规内容");
 
         verify(postApplyMapper, never()).selectList(any());
         verify(notificationService, never()).send(any(), any(), any(), any(), any(), any());
@@ -102,7 +105,7 @@ class AdminPostServiceImplTest {
     void takedownRejectsMissingPost() {
         when(postMapper.selectById(POST_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> adminPostService.takedownPost(POST_ID))
+        assertThatThrownBy(() -> adminPostService.takedownPost(POST_ID, "违规内容"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("帖子不存在");
     }
@@ -119,9 +122,12 @@ class AdminPostServiceImplTest {
         when(postApplyMapper.selectList(any())).thenReturn(List.of(apply));
         when(postApplyMapper.update(isNull(), any())).thenReturn(1);
 
-        adminPostService.takedownPost(POST_ID);
+        adminPostService.takedownPost(POST_ID, "内容违规");
 
         verify(postMapper).decrementCurrentPeople(POST_ID);
+        // 发布者收到含原因的下架通知；报名者收到报名取消通知——各自只发一次
+        verify(notificationService).send(eq(PUBLISHER_ID), eq(Notification.TYPE_POST_TAKEDOWN),
+                eq("组局已被下架"), contains("内容违规"), eq("/post/" + POST_ID), eq(POST_ID));
         verify(notificationService).send(eq(APPLICANT_ID), eq(Notification.TYPE_POST_TAKEDOWN),
                 any(), any(), any(), eq(POST_ID));
     }
@@ -138,9 +144,26 @@ class AdminPostServiceImplTest {
         when(postApplyMapper.selectList(any())).thenReturn(List.of(apply));
         when(postApplyMapper.update(isNull(), any())).thenReturn(0);
 
-        adminPostService.takedownPost(POST_ID);
+        adminPostService.takedownPost(POST_ID, null);
 
         verify(postMapper, never()).decrementCurrentPeople(POST_ID);
-        verify(notificationService, never()).send(any(), any(), any(), any(), any(), any());
+        // 并发下报名处理被跳过：该报名者不收到通知；发布者通知不受影响（下架本身成功了）
+        verify(notificationService, never()).send(eq(APPLICANT_ID), any(), any(), any(), any(), any());
+        verify(notificationService).send(eq(PUBLISHER_ID), eq(Notification.TYPE_POST_TAKEDOWN),
+                any(), any(), any(), eq(POST_ID));
+    }
+
+    @Test
+    void takedownWithoutReasonSendsGenericPublisherNotification() {
+        when(postMapper.selectById(POST_ID)).thenReturn(post("RECRUITING"));
+        when(postMapper.update(isNull(), any())).thenReturn(1);
+        when(postApplyMapper.selectList(any())).thenReturn(List.of());
+
+        adminPostService.takedownPost(POST_ID, null);
+
+        // 无原因时通知文案不带"原因："尾巴
+        verify(notificationService).send(eq(PUBLISHER_ID), eq(Notification.TYPE_POST_TAKEDOWN),
+                eq("组局已被下架"), eq("你的组局「被举报的组局」已被管理员下架"),
+                eq("/post/" + POST_ID), eq(POST_ID));
     }
 }

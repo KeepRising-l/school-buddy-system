@@ -217,15 +217,10 @@ public class ReportServiceImpl implements ReportService {
         if (valid) {
             String targetDesc;
             if (Report.TARGET_POST.equals(report.getTargetType())) {
-                // 下架帖子（复用 takedownPost：级联取消未完结报名+恢复人数+通知报名用户）
+                // 下架帖子（复用 takedownPost：级联取消未完结报名+恢复人数+通知发布者与报名用户）
                 Post post = postMapper.selectById(report.getTargetId());
                 if (post != null && !PostStatus.CANCELLED.equals(post.getStatus())) {
-                    adminPostService.takedownPost(report.getTargetId());
-                    // 通知发布者：帖子因违规被下架
-                    notificationService.send(post.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
-                            "帖子已被下架",
-                            "你的组局「" + post.getTitle() + "」因违规被下架，如有疑问请联系管理员",
-                            "/post/" + post.getId(), post.getId());
+                    adminPostService.takedownPost(report.getTargetId(), "经举报核实存在违规内容");
                     targetDesc = post.getTitle();
                 } else {
                     targetDesc = "帖子#" + report.getTargetId();
@@ -261,11 +256,7 @@ public class ReportServiceImpl implements ReportService {
                 if (Report.TARGET_POST.equals(report.getTargetType())) {
                     Post targetPost = postMapper.selectById(report.getTargetId());
                     if (targetPost != null && !PostStatus.CANCELLED.equals(targetPost.getStatus())) {
-                        adminPostService.takedownPost(targetPost.getId());
-                        notificationService.send(targetPost.getPublisherId(), Notification.TYPE_POST_TAKEDOWN,
-                                "多次违规，组局已被下架",
-                                "你的组局「" + targetPost.getTitle() + "」因多次被举报核实违规，已被系统自动下架",
-                                "/post/" + targetPost.getId(), targetPost.getId());
+                        adminPostService.takedownPost(targetPost.getId(), "多次违规被举报核实");
                     }
                 } else {
                     User targetUser = userMapper.selectById(report.getTargetId());

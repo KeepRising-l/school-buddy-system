@@ -10,7 +10,11 @@ public interface AdminPostService {
 
     IPage<PostVO> getPostList(int page, int size, String status, String category, Integer isAuditPass);
 
-    void takedownPost(Long postId);
+    /**
+     * 下架帖子。reason 为下架原因（可选），会随通知发送给发布者；
+     * 报名者会收到"报名已被取消"通知（报名联动取消）。
+     */
+    void takedownPost(Long postId, String reason);
 
     void auditPost(Long postId, boolean pass, String reason);
 
