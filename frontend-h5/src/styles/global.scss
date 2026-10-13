@@ -363,9 +363,14 @@ body {
 
 // 大屏（PC / 平板）下弹层跟随 H5 列的宽度，避免底部弹层铺满整个窗口、与居中的页面错位。
 // 不用 transform 定位是为了不破坏 Vant 自身的滑入动画。
+//
+// 这里必须用 body 前缀抬高优先级：Vant 的组件样式（vant/es/xxx/style）是随**懒加载的页面 chunk**
+// 之后才注入的，所以它比 global.scss 更靠后；只写 .van-popup--bottom 会在同优先级下被
+// Vant 的 `left: 0; width: 100%` 覆盖——实测表现是只剩 margin-left 生效，弹层整体左移半个列宽、
+// 宽度却仍是整屏（在 /post/create 的日期选择器上肉眼可见）。
 @media (min-width: 481px) {
-  .van-popup--bottom,
-  .van-popup--top {
+  body .van-popup--bottom,
+  body .van-popup--top {
     left: 50%;
     width: var(--app-max-width);
     margin-left: calc(var(--app-max-width) / -2);
