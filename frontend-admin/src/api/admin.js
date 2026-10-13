@@ -15,7 +15,8 @@ export const resetCredit = (data) => request.put('/api/admin/user/credit', data)
 
 // ===== 帖子管理 =====
 export const getPostList = (params) => request.get('/api/admin/post/list', { params })
-export const takedownPost = (id) => request.post(`/api/admin/post/takedown/${id}`)
+// 下架帖子（reason 可选，会随通知发送给发布者）
+export const takedownPost = (id, reason) => request.post(`/api/admin/post/takedown/${id}`, { reason })
 export const auditPost = (id, data) => request.post(`/api/admin/post/audit/${id}`, data)
 export const deletePost = (id) => request.delete(`/api/admin/post/delete/${id}`)
 

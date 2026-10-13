@@ -169,13 +169,22 @@ const handleView = (row) => {
   window.open(`${h5Base}/post/${row.id}`, '_blank')
 }
 
-// 下架帖子
+// 下架帖子（支持填写原因，原因会随通知发送给发布者）
 const handleTakedown = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要下架帖子「${row.title}」吗？下架后该帖子将不再展示。`, '提示', {
-      type: 'warning'
-    })
-    await takedownPost(row.id)
+    const { value: reason } = await ElMessageBox.prompt(
+      `确定要下架帖子「${row.title}」吗？下架后帖子不再展示，并通知发布者与已报名用户。`,
+      '下架确认',
+      {
+        type: 'warning',
+        confirmButtonText: '确定下架',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '下架原因（可选，将随通知发送给发布者）',
+        inputValidator: (v) => !v || v.length <= 100 || '原因最多 100 字'
+      }
+    )
+    await takedownPost(row.id, reason?.trim() || undefined)
     ElMessage.success('下架成功')
     loadData()
   } catch (e) {
