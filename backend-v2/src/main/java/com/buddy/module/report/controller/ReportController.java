@@ -7,6 +7,8 @@ import com.buddy.common.result.R;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.report.dto.ReportVO;
 import com.buddy.module.report.service.ReportService;
+import com.buddy.common.annotation.RateLimit;
+import com.buddy.common.annotation.RequireLogin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +33,8 @@ public class ReportController {
      * 提交举报
      * body: {targetType: "POST"/"USER", targetId: 1, reasonType: "违规内容", description: "..."}
      */
+    @RequireLogin
+    @RateLimit(value = "report:submit", max = 10, windowHours = 1)
     @PostMapping("/submit")
     public R<Void> submit(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
@@ -56,6 +60,7 @@ public class ReportController {
     /**
      * 我的举报记录（分页）
      */
+    @RequireLogin
     @GetMapping("/my")
     public R<IPage<ReportVO>> getMyReports(
             @RequestParam(defaultValue = "1") int page,

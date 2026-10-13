@@ -2,11 +2,13 @@ package com.buddy.module.post.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
 import com.buddy.common.statemachine.PostStateMachine;
+import com.buddy.common.store.AuxStore;
 import com.buddy.module.apply.entity.PostApply;
 import com.buddy.module.apply.mapper.PostApplyMapper;
 import com.buddy.module.credit.service.CreditService;
@@ -25,7 +27,6 @@ import com.buddy.module.tag.mapper.UserTagMapper;
 import com.buddy.module.user.entity.User;
 import com.buddy.module.user.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +39,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 帖子服务实现类（等价迁移自旧版）
@@ -65,7 +65,7 @@ public class PostServiceImpl implements PostService {
     private CreditService creditService;
 
     @Autowired
-    private StringRedisTemplate redisTemplate;
+    private AuxStore auxStore;
 
     @Autowired
     private NotificationService notificationService;
@@ -115,7 +115,8 @@ public class PostServiceImpl implements PostService {
         if (!request.getEndTime().isAfter(request.getStartTime())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "结束时间必须晚于开始时间");
         }
-        if (Duration.between(request.getStartTime(), request.getEndTime()).toHours() > 24) {
+        // 用精确比较判断是否超过24小时（toHours() 会截断，24小时59分会漏放）
+        if (request.getEndTime().isAfter(request.getStartTime().plusHours(24))) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "活动时长不能超过24小时");
         }
 
@@ -126,6 +127,9 @@ public class PostServiceImpl implements PostService {
         if (request.getRequireGender() != null && (request.getRequireGender() < 0 || request.getRequireGender() > 2)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "性别要求不合法（0-2）");
         }
+
+        // 并发防护：锁定用户行，串行化同一用户"计数+插入"，避免并发请求绕过上限
+        userMapper.lockById(userId);
 
         // 校验同时进行中的帖子数量
         Long activeCount = postMapper.selectCount(
@@ -198,20 +202,11 @@ public class PostServiceImpl implements PostService {
                 : toUserMap(userMapper.selectBatchIds(applicantIds));
 
         // 组装报名用户信息
-        List<PostDetailVO.ApplyUserVO> applyUsers = new ArrayList<>();
-        for (PostApply apply : applies) {
-            User applyUser = apply.getApplicantId() != null ? applyUserMap.get(apply.getApplicantId()) : null;
-            if (applyUser != null) {
-                PostDetailVO.ApplyUserVO vo = new PostDetailVO.ApplyUserVO();
-                vo.setUserId(applyUser.getId());
-                vo.setNickname(applyUser.getNickname());
-                vo.setAvatar(applyUser.getAvatar());
-                vo.setCreditLevel(creditService.getCreditLevel(applyUser.getCreditScore()));
-                applyUsers.add(vo);
-            }
-        }
+        // 联系方式可见性（缺口#5）：仅"发布者本人"与"已通过报名（APPROVED/ATTENDED）的参与者"
+        // 可以看到彼此的联系方式，用于成行后互相联系；游客/未通过者一律看不到。
+        boolean isOwner = userId != null && post.getPublisherId().equals(userId);
 
-        // 判断当前用户是否已报名
+        // 判断当前用户是否已报名（在组装报名用户前完成，联系方式可见性依赖它）
         boolean hasApplied = false;
         String applyStatus = null;
         Long myApplyId = null;
@@ -226,6 +221,26 @@ public class PostServiceImpl implements PostService {
                 hasApplied = true;
                 applyStatus = myApply.getStatus();
                 myApplyId = myApply.getId();
+            }
+        }
+        boolean contactVisible = isOwner
+                || ApplyStatus.APPROVED.equals(applyStatus)
+                || ApplyStatus.ATTENDED.equals(applyStatus);
+
+        List<PostDetailVO.ApplyUserVO> applyUsers = new ArrayList<>();
+        for (PostApply apply : applies) {
+            User applyUser = apply.getApplicantId() != null ? applyUserMap.get(apply.getApplicantId()) : null;
+            if (applyUser != null) {
+                PostDetailVO.ApplyUserVO vo = new PostDetailVO.ApplyUserVO();
+                vo.setUserId(applyUser.getId());
+                vo.setNickname(applyUser.getNickname());
+                vo.setAvatar(applyUser.getAvatar());
+                vo.setCreditLevel(creditService.getCreditLevel(applyUser.getCreditScore()));
+                // 可见时返回手机号，否则保持 null（前端显示"报名通过后可见"）
+                if (contactVisible) {
+                    vo.setContact(applyUser.getPhone());
+                }
+                applyUsers.add(vo);
             }
         }
 
@@ -252,6 +267,11 @@ public class PostServiceImpl implements PostService {
         detailVO.setHasApplied(hasApplied);
         detailVO.setApplyStatus(applyStatus);
         detailVO.setMyApplyId(myApplyId);
+        // 联系方式（缺口#5）：仅发布者与已通过报名者可见；发布者看自己时也返回，便于确认资料
+        detailVO.setContactVisible(contactVisible);
+        if (contactVisible && publisher != null) {
+            detailVO.setPublisherContact(publisher.getPhone());
+        }
 
         if (publisher != null) {
             detailVO.setPublisherNickname(publisher.getNickname());
@@ -325,27 +345,38 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ResultCode.FORBIDDEN, "只能取消自己发布的帖子");
         }
 
-        // 状态机校验
+        // 状态机预检（给出明确的错误文案）
         PostStateMachine.checkTransition(post.getStatus(), PostStatus.CANCELLED);
 
-        // 更新状态
-        post.setStatus(PostStatus.CANCELLED);
-        postMapper.updateById(post);
+        // 带预期旧状态的条件更新：并发下（如管理员同时下架）只有一次能成功，
+        // 避免先查后改覆盖并发状态、重复执行副作用
+        int updated = postMapper.update(null, new LambdaUpdateWrapper<Post>()
+                .eq(Post::getId, postId)
+                .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL, PostStatus.ONGOING)
+                .set(Post::getStatus, PostStatus.CANCELLED));
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.STATUS_TRANSIT_ERROR, "帖子状态已变化，请刷新后重试");
+        }
 
-        // 联动（D-008）：取消所有未完结的报名（PENDING/APPROVED/WAITLIST），
-        // APPROVED 报名取消后 current_people -1，逐个通知且不扣分
+        // 联动（D-008）：取消所有未完结的报名（PENDING/APPROVED/WAITLIST）。
+        // 副作用只在状态转换成功后执行；每条报名同样用条件更新防止并发重复处理
         List<PostApply> applies = postApplyMapper.selectList(
                 new LambdaQueryWrapper<PostApply>()
                         .eq(PostApply::getPostId, postId)
                         .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
         );
         for (PostApply apply : applies) {
+            int applyUpdated = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                    .eq(PostApply::getId, apply.getId())
+                    .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
+                    .set(PostApply::getStatus, ApplyStatus.CANCELLED)
+                    .set(PostApply::getHandleTime, LocalDateTime.now()));
+            if (applyUpdated == 0) {
+                continue; // 已被并发处理（如用户自己取消），跳过
+            }
             if (ApplyStatus.APPROVED.equals(apply.getStatus())) {
                 postMapper.decrementCurrentPeople(postId);
             }
-            apply.setStatus(ApplyStatus.CANCELLED);
-            apply.setHandleTime(LocalDateTime.now());
-            postApplyMapper.updateById(apply);
             // 通知该用户：组局已取消
             notificationService.send(apply.getApplicantId(), Notification.TYPE_POST_CANCEL,
                     "组局已取消",
@@ -356,11 +387,11 @@ public class PostServiceImpl implements PostService {
 
     @Override
     public void incrementViewCount(Long postId, Long userId) {
-        // Redis去重：10分钟内同一用户只计一次
+        // 去重：10分钟内同一用户只计一次（辅助存储，默认 MySQL，可切换 Redis）
         String key = VIEW_COUNT_KEY + postId + ":" + userId;
         try {
-            Boolean isNew = redisTemplate.opsForValue().setIfAbsent(key, "1", VIEW_DEDUP_MINUTES, TimeUnit.MINUTES);
-            if (Boolean.TRUE.equals(isNew)) {
+            boolean isNew = auxStore.setIfAbsent(key, Duration.ofMinutes(VIEW_DEDUP_MINUTES));
+            if (isNew) {
                 // 浏览量+1
                 Post post = postMapper.selectById(postId);
                 if (post != null) {
@@ -369,7 +400,7 @@ public class PostServiceImpl implements PostService {
                 }
             }
         } catch (Exception e) {
-            // Redis不可用，直接+1浏览量（不去重）
+            // 辅助存储不可用，直接+1浏览量（不去重）
             Post post = postMapper.selectById(postId);
             if (post != null) {
                 post.setViewCount(post.getViewCount() + 1);

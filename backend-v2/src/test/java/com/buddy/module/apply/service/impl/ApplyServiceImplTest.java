@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -190,13 +191,13 @@ class ApplyServiceImplTest {
         PostApply cancelled = apply("CANCELLED");
         when(postApplyMapper.selectOne(any())).thenReturn(cancelled);
         stubQualificationOk(post(PostStatus.RECRUITING));
+        when(postApplyMapper.update(isNull(), any())).thenReturn(1);
 
         applyService.apply(APPLICANT_ID, POST_ID);
 
-        // 复用旧记录行，规避唯一键冲突
+        // 复用旧记录行：条件更新将其重新激活为待审核，规避唯一键冲突
         verify(postApplyMapper, never()).insert(any(PostApply.class));
-        verify(postApplyMapper).updateById(cancelled);
-        assertThat(cancelled.getStatus()).isEqualTo("PENDING");
+        verify(postApplyMapper).update(isNull(), any());
         verify(notificationService).send(eq(PUBLISHER_ID), eq("APPLY_NEW"), any(), any(), any(), eq(POST_ID));
     }
 
@@ -364,7 +365,8 @@ class ApplyServiceImplTest {
         applyService.cancelApply(APPLICANT_ID, APPLY_ID);
 
         verify(postMapper).decrementCurrentPeople(POST_ID);
-        verify(postApplyMapper).updateById(firstWait);
+        // 递补改为条件更新（不再用全量 updateById 覆盖并发状态）
+        verify(postApplyMapper, never()).updateById(any(PostApply.class));
         assertThat(firstWait.getStatus()).isEqualTo("PENDING");
         verify(notificationService).send(eq(firstWait.getApplicantId()), eq("WAITLIST_PROMOTED"),
                 eq("有空位啦！"), any(), any(), eq(POST_ID));
@@ -432,12 +434,13 @@ class ApplyServiceImplTest {
         when(postMapper.selectById(POST_ID)).thenReturn(post).thenReturn(afterIncrement);
         when(postApplyMapper.update(isNull(), any())).thenReturn(1);
         when(postMapper.incrementCurrentPeople(POST_ID)).thenReturn(1);
+        when(postMapper.update(isNull(), any())).thenReturn(1);
         when(userMapper.selectById(APPLICANT_ID)).thenReturn(applicant(0, 100));
 
         applyService.approve(PUBLISHER_ID, APPLY_ID);
 
-        assertThat(afterIncrement.getStatus()).isEqualTo(PostStatus.FULL);
-        verify(postMapper).updateById(afterIncrement);
+        // 满员流转改为带条件的原子更新（不再用全量 updateById 覆盖并发状态）
+        verify(postMapper).update(isNull(), any());
         verify(notificationService).send(eq(APPLICANT_ID), eq("APPLY_RESULT"),
                 eq("报名已通过"), any(), any(), eq(POST_ID));
     }
@@ -502,6 +505,49 @@ class ApplyServiceImplTest {
         applyService.markAttendance(PUBLISHER_ID, APPLY_ID, true);
 
         verify(creditService, never()).recordPenalty(anyLong(), anyInt(), any(), any(), anyLong());
+        verify(notificationService, never()).send(any(), any(), any(), any(), any(), any());
+    }
+
+    // ===== 并发与冲突响应 =====
+
+    @Test
+    void applyRejectsWhenConcurrentInsertConflicts() {
+        when(postMapper.selectById(POST_ID)).thenReturn(post(PostStatus.RECRUITING));
+        when(postApplyMapper.selectOne(any())).thenReturn(null);
+        stubQualificationOk(post(PostStatus.RECRUITING));
+        when(postApplyMapper.insert(any(PostApply.class)))
+                .thenThrow(new DuplicateKeyException("Duplicate entry 'uk_post_applicant'"));
+
+        assertThatThrownBy(() -> applyService.apply(APPLICANT_ID, POST_ID))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已报名该活动");
+    }
+
+    @Test
+    void applyRejectsWhenReactivateLostRace() {
+        when(postMapper.selectById(POST_ID)).thenReturn(post(PostStatus.RECRUITING));
+        when(postApplyMapper.selectOne(any())).thenReturn(apply("CANCELLED"));
+        stubQualificationOk(post(PostStatus.RECRUITING));
+        when(postApplyMapper.update(isNull(), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> applyService.apply(APPLICANT_ID, POST_ID))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("报名状态已变化");
+    }
+
+    @Test
+    void promoteSkipsWhenLostConcurrentRace() {
+        Post full = post(PostStatus.FULL);
+        when(postApplyMapper.selectById(APPLY_ID)).thenReturn(apply("APPROVED"));
+        when(postMapper.selectById(POST_ID)).thenReturn(full);
+        // 取消报名成功（第 1 次 update=1）；递补竞争失败（第 2 次 update=0）
+        when(postApplyMapper.update(isNull(), any())).thenReturn(1).thenReturn(0);
+        PostApply firstWait = apply("WAITLIST");
+        when(postApplyMapper.selectOne(any())).thenReturn(firstWait);
+
+        applyService.cancelApply(APPLICANT_ID, APPLY_ID);
+
+        // 递补竞争失败：不得发送"有空位啦"通知
         verify(notificationService, never()).send(any(), any(), any(), any(), any(), any());
     }
 }

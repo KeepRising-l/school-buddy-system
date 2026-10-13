@@ -12,6 +12,7 @@ import com.buddy.module.user.dto.UserProfileVO;
 import com.buddy.module.user.dto.UserTagVO;
 import com.buddy.module.user.dto.UserVO;
 import com.buddy.module.user.service.UserService;
+import com.buddy.common.annotation.RequireLogin;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,7 @@ public class UserController {
     /**
      * 获取个人资料
      */
+    @RequireLogin
     @GetMapping("/profile")
     public R<UserVO> getProfile() {
         Long userId = UserContext.getUserId();
@@ -48,6 +50,7 @@ public class UserController {
     /**
      * 编辑个人资料
      */
+    @RequireLogin
     @PutMapping("/profile")
     public R<Void> updateProfile(@RequestBody @Valid ProfileUpdateRequest request) {
         Long userId = UserContext.getUserId();
@@ -58,6 +61,7 @@ public class UserController {
     /**
      * 获取我的标签
      */
+    @RequireLogin
     @GetMapping("/tags")
     public R<List<UserTagVO>> getMyTags() {
         Long userId = UserContext.getUserId();
@@ -68,6 +72,7 @@ public class UserController {
      * 设置兴趣标签
      * body: {tagIds: [1,2,3], levels: [3,2,5]}
      */
+    @RequireLogin
     @PutMapping("/tags")
     public R<Void> setUserTags(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
@@ -105,6 +110,7 @@ public class UserController {
     /**
      * 我的发布
      */
+    @RequireLogin
     @GetMapping("/posts")
     public R<IPage<PostVO>> getMyPosts(
             @RequestParam(defaultValue = "1") int page,
@@ -117,6 +123,7 @@ public class UserController {
     /**
      * 我的预约
      */
+    @RequireLogin
     @GetMapping("/applies")
     public R<IPage<ApplyVO>> getMyApplies(
             @RequestParam(defaultValue = "1") int page,
@@ -138,6 +145,7 @@ public class UserController {
      * 设置主页隐私
      * body: {privacy: 0/1}
      */
+    @RequireLogin
     @PutMapping("/privacy")
     public R<Void> setProfilePrivacy(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();

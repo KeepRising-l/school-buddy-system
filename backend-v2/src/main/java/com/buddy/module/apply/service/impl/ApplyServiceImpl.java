@@ -25,6 +25,7 @@ import com.buddy.module.tag.mapper.UserTagMapper;
 import com.buddy.module.user.entity.User;
 import com.buddy.module.user.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -103,19 +104,30 @@ public class ApplyServiceImpl implements ApplyService {
         // 插入或复用旧报名记录（取消/被拒后再次报名复用旧行，规避唯一键冲突）
         PostApply apply;
         if (existing != null) {
+            // 条件更新：并发下只有一条"取消/被拒"记录能被重新激活为待审核
+            int reactivated = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                    .eq(PostApply::getId, existing.getId())
+                    .in(PostApply::getStatus, ApplyStatus.CANCELLED, ApplyStatus.REJECTED)
+                    .set(PostApply::getStatus, ApplyStatus.PENDING)
+                    .set(PostApply::getApplyTime, LocalDateTime.now())
+                    .set(PostApply::getHandleTime, null)
+                    .set(PostApply::getRemark, null));
+            if (reactivated == 0) {
+                throw new BusinessException(ResultCode.APPLY_DUPLICATE, "报名状态已变化，请刷新后重试");
+            }
             apply = existing;
-            apply.setStatus(ApplyStatus.PENDING);
-            apply.setApplyTime(LocalDateTime.now());
-            apply.setHandleTime(null);
-            apply.setRemark(null);
-            postApplyMapper.updateById(apply);
         } else {
             apply = new PostApply();
             apply.setPostId(postId);
             apply.setApplicantId(userId);
             apply.setStatus(ApplyStatus.PENDING);
             apply.setApplyTime(LocalDateTime.now());
-            postApplyMapper.insert(apply);
+            try {
+                postApplyMapper.insert(apply);
+            } catch (DuplicateKeyException e) {
+                // 并发双击/多端同时报名：由唯一索引 uk_post_applicant 兜底，返回明确业务响应
+                throw new BusinessException(ResultCode.APPLY_DUPLICATE, "已报名该活动，请勿重复提交");
+            }
         }
 
         // 通知发布者：有新的报名申请（与业务同一事务）
@@ -225,19 +237,35 @@ public class ApplyServiceImpl implements ApplyService {
         // 插入或复用旧记录（取消/被拒后再次候补复用旧行，规避唯一键冲突）
         PostApply apply;
         if (existing != null) {
+            // 条件更新：并发下只有一条"取消/被拒"记录能被重新激活为候补
+            LocalDateTime now = LocalDateTime.now();
+            int reactivated = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                    .eq(PostApply::getId, existing.getId())
+                    .in(PostApply::getStatus, ApplyStatus.CANCELLED, ApplyStatus.REJECTED)
+                    .set(PostApply::getStatus, ApplyStatus.WAITLIST)
+                    .set(PostApply::getApplyTime, now)
+                    .set(PostApply::getHandleTime, null)
+                    .set(PostApply::getRemark, null));
+            if (reactivated == 0) {
+                throw new BusinessException(ResultCode.APPLY_DUPLICATE, "报名状态已变化，请刷新后重试");
+            }
             apply = existing;
             apply.setStatus(ApplyStatus.WAITLIST);
-            apply.setApplyTime(LocalDateTime.now());
+            apply.setApplyTime(now);
             apply.setHandleTime(null);
             apply.setRemark(null);
-            postApplyMapper.updateById(apply);
         } else {
             apply = new PostApply();
             apply.setPostId(post.getId());
             apply.setApplicantId(userId);
             apply.setStatus(ApplyStatus.WAITLIST);
             apply.setApplyTime(LocalDateTime.now());
-            postApplyMapper.insert(apply);
+            try {
+                postApplyMapper.insert(apply);
+            } catch (DuplicateKeyException e) {
+                // 并发双击/多端同时候补：由唯一索引 uk_post_applicant 兜底，返回明确业务响应
+                throw new BusinessException(ResultCode.APPLY_DUPLICATE, "已报名过该活动，请勿重复提交");
+            }
         }
 
         // 查询候补位置
@@ -274,10 +302,16 @@ public class ApplyServiceImpl implements ApplyService {
             return;
         }
 
-        // 递补为待审核
+        // 递补为待审核（条件更新防并发重复递补：只有一个请求能把候补置为待审核）
+        int promoted = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                .eq(PostApply::getId, firstWait.getId())
+                .eq(PostApply::getStatus, ApplyStatus.WAITLIST)
+                .set(PostApply::getStatus, ApplyStatus.PENDING)
+                .set(PostApply::getHandleTime, LocalDateTime.now()));
+        if (promoted == 0) {
+            return;
+        }
         firstWait.setStatus(ApplyStatus.PENDING);
-        firstWait.setHandleTime(LocalDateTime.now());
-        postApplyMapper.updateById(firstWait);
 
         // 通知候补者：有空位了
         notificationService.send(firstWait.getApplicantId(), Notification.TYPE_WAITLIST_PROMOTED,
@@ -344,8 +378,11 @@ public class ApplyServiceImpl implements ApplyService {
                 // 递补后重新查询（递补不改变 current_people，若无人候补则回退）
                 post = postMapper.selectById(post.getId());
                 if (post.getCurrentPeople() < post.getMaxPeople()) {
-                    post.setStatus(PostStatus.RECRUITING);
-                    postMapper.updateById(post);
+                    // 条件更新：仅在仍为满员时回退为招募中，避免覆盖并发的取消/下架
+                    postMapper.update(null, new LambdaUpdateWrapper<Post>()
+                            .eq(Post::getId, post.getId())
+                            .eq(Post::getStatus, PostStatus.FULL)
+                            .set(Post::getStatus, PostStatus.RECRUITING));
                 }
             }
         }
@@ -411,12 +448,14 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("名额已满，无法通过报名");
         }
 
-        // 重新查询，检查是否满员并流转状态
+        // 重新查询，检查是否满员并流转状态（条件更新，避免覆盖并发的取消/下架）
         post = postMapper.selectById(post.getId());
         if (post.getCurrentPeople() >= post.getMaxPeople()) {
             PostStateMachine.checkTransition(post.getStatus(), PostStatus.FULL);
-            post.setStatus(PostStatus.FULL);
-            postMapper.updateById(post);
+            postMapper.update(null, new LambdaUpdateWrapper<Post>()
+                    .eq(Post::getId, post.getId())
+                    .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL)
+                    .set(Post::getStatus, PostStatus.FULL));
         }
 
         // 通知报名者：审核通过
@@ -645,11 +684,11 @@ public class ApplyServiceImpl implements ApplyService {
             return "不限";
         }
         switch (level) {
-            case 1: return "青铜";
-            case 2: return "白银";
-            case 3: return "黄金";
-            case 4: return "钻石";
-            case 5: return "王者";
+            case 1: return "萌新";
+            case 2: return "小白";
+            case 3: return "熟手";
+            case 4: return "高手";
+            case 5: return "宗师";
             default: return String.valueOf(level);
         }
     }

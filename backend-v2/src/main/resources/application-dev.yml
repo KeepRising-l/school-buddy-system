@@ -8,7 +8,7 @@ spring:
     # 真实密码放在 application-local.yml（已被 gitignore），避免明文入库
     password: ${DB_PASSWORD:}
 
-  # Redis 配置（注意：Boot 3 迁移点，spring.redis -> spring.data.redis）
+  # Redis 配置（仅当 app.aux.store=redis 时使用；默认 mysql 实现无需 Redis）
   data:
     redis:
       host: localhost
@@ -21,3 +21,9 @@ spring:
           max-idle: 8
           min-idle: 0
           max-wait: -1ms
+
+# 开发环境 CORS 白名单（Vite 开发服务器地址，仅本地开发使用）
+# 生产环境不预置任何来源，部署时通过配置注入正式前端域名
+app:
+  cors:
+    allowed-origins: http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001

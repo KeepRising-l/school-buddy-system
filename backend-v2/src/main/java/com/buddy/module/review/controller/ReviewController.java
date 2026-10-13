@@ -6,6 +6,7 @@ import com.buddy.module.review.dto.request.ReviewReplyRequest;
 import com.buddy.module.review.dto.request.ReviewRequest;
 import com.buddy.module.review.entity.Review;
 import com.buddy.module.review.service.ReviewService;
+import com.buddy.common.annotation.RequireLogin;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,7 @@ public class ReviewController {
     /**
      * 提交评价
      */
+    @RequireLogin
     @PostMapping("/submit")
     public R<Void> submitReview(@RequestBody @Valid ReviewRequest request) {
         Long userId = UserContext.getUserId();
@@ -48,6 +50,7 @@ public class ReviewController {
     /**
      * 被评价人对评价进行回复/解释（互评双向）
      */
+    @RequireLogin
     @PostMapping("/reply")
     public R<Void> replyReview(@RequestBody @Valid ReviewReplyRequest request) {
         Long userId = UserContext.getUserId();

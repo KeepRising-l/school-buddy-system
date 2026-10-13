@@ -24,6 +24,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,6 +33,12 @@ import java.util.stream.Collectors;
  * 推荐服务实现类（等价迁移自旧版）
  * 核心推荐算法：Score = 0.4×标签匹配度 + 0.3×时间重合度 + 0.2×信誉分/100 + 0.1×热度因子
  * 游客/无标签用户：Score = 0.5×时间重合度 + 0.3×热度因子 + 0.2×标签匹配度
+ *
+ * <p>性能优化（缺口#2，2026-10-13）：</p>
+ * <ul>
+ *   <li>发布者信息由"逐条查询"改为一次批量 IN 查询（消除 N+1）；</li>
+ *   <li>打分排序结果按"用户+筛选条件"写入进程内缓存（5 分钟 TTL）。</li>
+ * </ul>
  */
 @Service
 public class RecommendServiceImpl implements RecommendService {
@@ -53,6 +61,9 @@ public class RecommendServiceImpl implements RecommendService {
     /** 时间重合度计算的最大小时数（7天=168小时） */
     private static final double MAX_HOURS_FOR_TIME = 168.0;
 
+    /** 推荐结果缓存（5 分钟 TTL） */
+    private final RecommendCache cache = new RecommendCache(5);
+
     @Override
     public IPage<PostVO> getRecommendList(Long userId, int page, int size, String category, String sort, String timeRange, String keyword) {
         // 如果sort为latest或hot，走普通排序逻辑
@@ -62,6 +73,49 @@ public class RecommendServiceImpl implements RecommendService {
             return getSortedList(page, size, category, sort, timeRange, keyword);
         }
 
+        // 推荐排序：优先读缓存（相同用户+筛选条件的打分明细 5 分钟内复用）
+        String cacheKey = buildCacheKey(userId, category, timeRange, keyword);
+        List<Post> allPosts = cache.get(cacheKey);
+        if (allPosts == null) {
+            allPosts = queryAndScorePosts(userId, category, timeRange, keyword);
+            cache.put(cacheKey, allPosts);
+        }
+        if (allPosts.isEmpty()) {
+            return new Page<>(page, size);
+        }
+
+        // 手动分页
+        int total = allPosts.size();
+        int fromIndex = (page - 1) * size;
+        int toIndex = Math.min(fromIndex + size, total);
+
+        List<PostVO> voList;
+        if (fromIndex >= total) {
+            voList = new ArrayList<>();
+        } else {
+            voList = postConverter.toVOList(allPosts.subList(fromIndex, toIndex));
+        }
+
+        Page<PostVO> result = new Page<>(page, size, total);
+        result.setRecords(voList);
+        return result;
+    }
+
+    /**
+     * 缓存键：用户 + 筛选条件
+     */
+    private String buildCacheKey(Long userId, String category, String timeRange, String keyword) {
+        return (userId == null ? "guest" : userId) + "|"
+                + (category == null ? "" : category) + "|"
+                + (timeRange == null ? "" : timeRange) + "|"
+                + (keyword == null ? "" : keyword);
+    }
+
+    /**
+     * 查询并打分排序。
+     * 发布者批量加载（一次 IN 查询），消除原逐条 selectById 的 N+1。
+     */
+    private List<Post> queryAndScorePosts(Long userId, String category, String timeRange, String keyword) {
         // 查询RECRUITING和FULL状态且已审核通过的帖子
         LambdaQueryWrapper<Post> wrapper = new LambdaQueryWrapper<Post>()
                 .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL)
@@ -83,8 +137,18 @@ public class RecommendServiceImpl implements RecommendService {
 
         List<Post> allPosts = postMapper.selectList(wrapper);
         if (allPosts.isEmpty()) {
-            return new Page<>(page, size);
+            return new ArrayList<>();
         }
+
+        // 批量加载发布者：一次 IN 查询，替代逐条 selectById（N+1 修复）
+        Set<Long> publisherIds = allPosts.stream()
+                .map(Post::getPublisherId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, User> publisherMap = publisherIds.isEmpty()
+                ? Map.of()
+                : userMapper.selectBatchIds(publisherIds).stream()
+                        .collect(Collectors.toMap(User::getId, u -> u));
 
         // 获取用户兴趣标签集合
         Set<Long> userTagIds = new HashSet<>();
@@ -101,37 +165,21 @@ public class RecommendServiceImpl implements RecommendService {
         Set<Long> finalUserTagIds = userTagIds;
         List<ScoredPost> scoredPosts = new ArrayList<>();
         for (Post post : allPosts) {
-            double score = calculateScore(post, userId, finalUserTagIds);
+            User publisher = publisherMap.get(post.getPublisherId());
+            double score = calculateScore(post, userId, finalUserTagIds, publisher);
             scoredPosts.add(new ScoredPost(post, score));
         }
 
         // 按权重降序排序
         scoredPosts.sort((a, b) -> Double.compare(b.score, a.score));
-
-        // 手动分页
-        int total = scoredPosts.size();
-        int fromIndex = (page - 1) * size;
-        int toIndex = Math.min(fromIndex + size, total);
-
-        List<PostVO> voList;
-        if (fromIndex >= total) {
-            voList = new ArrayList<>();
-        } else {
-            voList = scoredPosts.subList(fromIndex, toIndex).stream()
-                    .map(sp -> postConverter.toVO(sp.post))
-                    .collect(Collectors.toList());
-        }
-
-        Page<PostVO> result = new Page<>(page, size, total);
-        result.setRecords(voList);
-        return result;
+        return scoredPosts.stream().map(sp -> sp.post).collect(Collectors.toList());
     }
 
     /**
      * 计算帖子推荐权重
      * Score = 0.4×标签匹配度 + 0.3×时间重合度 + 0.2×信誉分/100 + 0.1×热度因子
      */
-    private double calculateScore(Post post, Long userId, Set<Long> userTagIds) {
+    private double calculateScore(Post post, Long userId, Set<Long> userTagIds, User publisher) {
         // 标签匹配度：用户标签集合与帖子tagIds的交集数量 / 帖子标签总数
         double tagMatchScore = calculateTagMatchScore(post, userTagIds);
 
@@ -145,7 +193,6 @@ public class RecommendServiceImpl implements RecommendService {
         double score;
         if (userId != null && !userTagIds.isEmpty()) {
             // 已登录且有兴趣标签的用户：使用完整公式（含信誉分因子）
-            User publisher = userMapper.selectById(post.getPublisherId());
             double creditFactor = publisher != null ? publisher.getCreditScore() / 100.0 : 0.5;
             score = 0.4 * tagMatchScore + 0.3 * timeScore + 0.2 * creditFactor + 0.1 * hotFactor;
 

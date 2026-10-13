@@ -1,11 +1,13 @@
 package com.buddy.module.report.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
+import com.buddy.common.store.AuxStore;
 import com.buddy.module.notification.entity.Notification;
 import com.buddy.module.notification.service.NotificationService;
 import com.buddy.module.post.entity.Post;
@@ -21,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
@@ -44,8 +47,14 @@ public class ReportServiceImpl implements ReportService {
     /** 自动风控阈值：同一对象累计有效举报次数 */
     private static final int AUTO_BAN_THRESHOLD = 3;
 
+    /** 24小时重复举报去重键前缀（原子门闩：默认 MySQL 实现，可切换 Redis） */
+    private static final String REPORT_DEDUP_KEY = "report:dedup:";
+
     @Autowired
     private ReportMapper reportMapper;
+
+    @Autowired
+    private AuxStore auxStore;
 
     @Autowired
     private UserMapper userMapper;
@@ -87,7 +96,7 @@ public class ReportServiceImpl implements ReportService {
             throw new BusinessException("不能举报自己");
         }
 
-        // 24小时内重复举报校验
+        // 24小时内重复举报校验（数据库查重兜底）
         LocalDateTime windowStart = LocalDateTime.now().minusNanos(DUPLICATE_WINDOW_MS * 1_000_000);
         Long duplicateCount = reportMapper.selectCount(
                 new LambdaQueryWrapper<Report>()
@@ -100,15 +109,53 @@ public class ReportServiceImpl implements ReportService {
             throw new BusinessException("已举报过该对象，请勿重复举报");
         }
 
-        // 插入举报
-        Report report = new Report();
-        report.setReporterId(reporterId);
-        report.setTargetType(targetType);
-        report.setTargetId(targetId);
-        report.setReasonType(reasonType);
-        report.setDescription(description);
-        report.setStatus(Report.STATUS_PENDING);
-        reportMapper.insert(report);
+        // 原子门闩：并发双击/多端同时提交时只有一次能通过
+        // （默认 MySQL 实现，可切换 Redis；存储不可用时降级为仅数据库查重并记录告警）
+        String dedupKey = REPORT_DEDUP_KEY + reporterId + ":" + targetType + ":" + targetId;
+        if (!acquireDedupGate(dedupKey)) {
+            throw new BusinessException("已举报过该对象，请勿重复举报");
+        }
+
+        try {
+            // 插入举报
+            Report report = new Report();
+            report.setReporterId(reporterId);
+            report.setTargetType(targetType);
+            report.setTargetId(targetId);
+            report.setReasonType(reasonType);
+            report.setDescription(description);
+            report.setStatus(Report.STATUS_PENDING);
+            reportMapper.insert(report);
+        } catch (RuntimeException e) {
+            // 插入失败时释放门闩，允许用户重试
+            releaseDedupGate(dedupKey);
+            throw e;
+        }
+    }
+
+    /**
+     * 获取重复举报去重门闩（首次写入成功 + 24小时过期）
+     *
+     * @return true=首次提交；false=窗口内已提交过；存储异常时降级返回 true（由数据库查重兜底）
+     */
+    private boolean acquireDedupGate(String key) {
+        try {
+            return auxStore.setIfAbsent(key, Duration.ofMillis(DUPLICATE_WINDOW_MS));
+        } catch (Exception e) {
+            log.warn("举报查重门闩不可用（辅助存储异常），降级为数据库查重: {}", e.getMessage());
+            return true;
+        }
+    }
+
+    /**
+     * 释放去重门闩（插入失败时的补偿，best-effort）
+     */
+    private void releaseDedupGate(String key) {
+        try {
+            auxStore.delete(key);
+        } catch (Exception ignore) {
+            // 释放失败不影响主流程，门闩会由 TTL 自动过期
+        }
     }
 
     @Override
@@ -153,12 +200,18 @@ public class ReportServiceImpl implements ReportService {
             throw new BusinessException("该举报已处理");
         }
 
-        // 更新举报状态
-        report.setStatus(valid ? Report.STATUS_VALID : Report.STATUS_INVALID);
-        report.setHandleBy(adminId);
-        report.setHandleTime(LocalDateTime.now());
-        report.setHandleRemark(remark);
-        reportMapper.updateById(report);
+        // 带预期旧状态的条件更新：并发/重复处置时只有一次能生效（影响 0 行直接失败），
+        // 保证下架/封禁等副作用不会重复执行
+        int updated = reportMapper.update(null, new LambdaUpdateWrapper<Report>()
+                .eq(Report::getId, reportId)
+                .eq(Report::getStatus, Report.STATUS_PENDING)
+                .set(Report::getStatus, valid ? Report.STATUS_VALID : Report.STATUS_INVALID)
+                .set(Report::getHandleBy, adminId)
+                .set(Report::getHandleTime, LocalDateTime.now())
+                .set(Report::getHandleRemark, remark));
+        if (updated == 0) {
+            throw new BusinessException("该举报已被处理，请刷新后重试");
+        }
 
         // 有效举报：联动处理
         if (valid) {

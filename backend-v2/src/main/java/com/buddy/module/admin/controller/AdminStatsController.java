@@ -2,6 +2,7 @@ package com.buddy.module.admin.controller;
 
 import com.buddy.common.annotation.RequireAdmin;
 import com.buddy.common.result.R;
+import com.buddy.module.admin.dto.ReportStatsVO;
 import com.buddy.module.admin.dto.StatsVO;
 import com.buddy.module.admin.service.StatsService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -113,6 +114,16 @@ public class AdminStatsController {
     public R<List<Map<String, Object>>> getFunnel(
             @RequestParam(defaultValue = "30") int days) {
         return R.ok(statsService.getFunnel(days));
+    }
+
+    /**
+     * 举报处理统计（缺口#4：总量/已处理/有效/待处理 + 处理率 + 平均处理时长 + 趋势）
+     */
+    @RequireAdmin
+    @GetMapping("/reports")
+    public R<ReportStatsVO> getReportStats(
+            @RequestParam(defaultValue = "30") int days) {
+        return R.ok(statsService.getReportStats(days));
     }
 
     /**

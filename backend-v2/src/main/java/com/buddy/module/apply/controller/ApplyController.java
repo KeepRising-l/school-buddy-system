@@ -7,6 +7,8 @@ import com.buddy.common.result.R;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.apply.dto.ApplyVO;
 import com.buddy.module.apply.service.ApplyService;
+import com.buddy.common.annotation.RateLimit;
+import com.buddy.common.annotation.RequireLogin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,6 +35,8 @@ public class ApplyController {
      * 报名
      * body: {postId: 1}
      */
+    @RequireLogin
+    @RateLimit(value = "apply:join", max = 10, windowHours = 1)
     @PostMapping("/join")
     public R<Void> apply(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
@@ -45,6 +49,8 @@ public class ApplyController {
      * 候补报名：帖子满员时进入候补队列
      * body: {postId: 1}
      */
+    @RequireLogin
+    @RateLimit(value = "apply:waitlist", max = 10, windowHours = 1)
     @PostMapping("/waitlist")
     public R<Void> waitlist(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
@@ -71,6 +77,7 @@ public class ApplyController {
     /**
      * 取消报名
      */
+    @RequireLogin
     @PostMapping("/cancel/{id}")
     public R<Void> cancelApply(@PathVariable Long id) {
         Long userId = UserContext.getUserId();
@@ -81,6 +88,7 @@ public class ApplyController {
     /**
      * 报名列表（发布者查看）
      */
+    @RequireLogin
     @GetMapping("/list/{postId}")
     public R<List<ApplyVO>> getApplyList(@PathVariable Long postId) {
         Long userId = UserContext.getUserId();
@@ -90,6 +98,7 @@ public class ApplyController {
     /**
      * 同意报名
      */
+    @RequireLogin
     @PostMapping("/approve/{id}")
     public R<Void> approve(@PathVariable Long id) {
         Long userId = UserContext.getUserId();
@@ -100,6 +109,7 @@ public class ApplyController {
     /**
      * 拒绝报名
      */
+    @RequireLogin
     @PostMapping("/reject/{id}")
     public R<Void> reject(@PathVariable Long id) {
         Long userId = UserContext.getUserId();
@@ -110,6 +120,7 @@ public class ApplyController {
     /**
      * 收到的报名申请
      */
+    @RequireLogin
     @GetMapping("/received")
     public R<IPage<ApplyVO>> getReceivedApplies(
             @RequestParam(defaultValue = "1") int page,
@@ -122,6 +133,7 @@ public class ApplyController {
      * 标记出勤状态
      * body: {attended: true/false}
      */
+    @RequireLogin
     @PostMapping("/attendance/{id}")
     public R<Void> markAttendance(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();

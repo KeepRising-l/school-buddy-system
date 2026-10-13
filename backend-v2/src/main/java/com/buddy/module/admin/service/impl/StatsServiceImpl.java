@@ -4,12 +4,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.PostStatus;
+import com.buddy.module.admin.dto.ReportStatsVO;
 import com.buddy.module.admin.dto.StatsVO;
 import com.buddy.module.admin.service.StatsService;
 import com.buddy.module.apply.entity.PostApply;
 import com.buddy.module.apply.mapper.PostApplyMapper;
 import com.buddy.module.post.entity.Post;
 import com.buddy.module.post.mapper.PostMapper;
+import com.buddy.module.report.entity.Report;
+import com.buddy.module.report.mapper.ReportMapper;
 import com.buddy.module.user.entity.User;
 import com.buddy.module.user.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +46,9 @@ public class StatsServiceImpl implements StatsService {
     @Autowired
     private PostApplyMapper postApplyMapper;
 
+    @Autowired
+    private ReportMapper reportMapper;
+
     @Override
     public StatsVO getOverview() {
         StatsVO vo = new StatsVO();
@@ -68,19 +74,16 @@ public class StatsServiceImpl implements StatsService {
                 new LambdaQueryWrapper<Post>().eq(Post::getStatus, PostStatus.FINISHED)
         ));
 
-        // 活跃用户数（近7天有发帖或报名的用户）
+        // 活跃用户数（近7天有发帖或报名的用户，并集去重）
         LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
-        Long activePostUsers = postMapper.selectCount(
-                new QueryWrapper<Post>()
-                        .ge("created_time", sevenDaysAgo)
+        vo.setActiveUsers(countActiveUsers(
+                postMapper.selectObjs(new QueryWrapper<Post>()
                         .select("DISTINCT publisher_id")
-        );
-        Long activeApplyUsers = postApplyMapper.selectCount(
-                new QueryWrapper<PostApply>()
-                        .ge("apply_time", sevenDaysAgo)
+                        .ge("created_time", sevenDaysAgo)),
+                postApplyMapper.selectObjs(new QueryWrapper<PostApply>()
                         .select("DISTINCT applicant_id")
-        );
-        vo.setActiveUsers(activePostUsers + activeApplyUsers);
+                        .ge("apply_time", sevenDaysAgo))
+        ));
 
         // 分类统计TOP5
         vo.setCategoryStats(getCategoryTop5());
@@ -88,12 +91,47 @@ public class StatsServiceImpl implements StatsService {
         return vo;
     }
 
+    /** 趋势类查询天数上限（防止 days 过大导致循环查询拖慢接口） */
+    private static final int MAX_TREND_DAYS = 90;
+
+    /** 趋势类查询天数下限 */
+    private static final int MIN_TREND_DAYS = 1;
+
+    /**
+     * 限制查询天数到 [1, 90]，避免非法或超大 days 造成大量循环查询
+     */
+    private static int clampDays(int days) {
+        return Math.max(MIN_TREND_DAYS, Math.min(days, MAX_TREND_DAYS));
+    }
+
+    /**
+     * 统计活跃用户并集大小（发帖用户 + 报名用户，按用户ID去重，避免直接相加重复计数）
+     */
+    private static long countActiveUsers(List<Object> postUserIds, List<Object> applyUserIds) {
+        Set<Long> userIds = new HashSet<>();
+        addUserIds(userIds, postUserIds);
+        addUserIds(userIds, applyUserIds);
+        return userIds.size();
+    }
+
+    private static void addUserIds(Set<Long> target, List<Object> ids) {
+        if (ids == null) {
+            return;
+        }
+        for (Object id : ids) {
+            if (id instanceof Number) {
+                target.add(((Number) id).longValue());
+            }
+        }
+    }
+
     @Override
     public List<Map<String, Object>> getPostTrend(int days) {
+        days = clampDays(days);
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate today = LocalDate.now();
 
-        for (int i = days - 1; i >= 0; i--) {
+        for (int i = clampDays(days) - 1; i >= 0; i--) {
             LocalDate date = today.minusDays(i);
             LocalDateTime dayStart = LocalDateTime.of(date, LocalTime.MIN);
             LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
@@ -118,7 +156,7 @@ public class StatsServiceImpl implements StatsService {
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate today = LocalDate.now();
 
-        for (int i = days - 1; i >= 0; i--) {
+        for (int i = clampDays(days) - 1; i >= 0; i--) {
             LocalDate date = today.minusDays(i);
             LocalDateTime dayStart = LocalDateTime.of(date, LocalTime.MIN);
             LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
@@ -144,30 +182,25 @@ public class StatsServiceImpl implements StatsService {
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate today = LocalDate.now();
 
-        for (int i = days - 1; i >= 0; i--) {
+        for (int i = clampDays(days) - 1; i >= 0; i--) {
             LocalDate date = today.minusDays(i);
             LocalDateTime dayStart = LocalDateTime.of(date, LocalTime.MIN);
             LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
 
-            // 当天发帖的用户数
-            Long postUserCount = postMapper.selectCount(
-                    new QueryWrapper<Post>()
-                            .ge("created_time", dayStart)
-                            .le("created_time", dayEnd)
+            // 当天发帖/报名的用户并集（同一用户重复动作只计一次，避免直接相加重复计数）
+            long activeCount = countActiveUsers(
+                    postMapper.selectObjs(new QueryWrapper<Post>()
                             .select("DISTINCT publisher_id")
-            );
-
-            // 当天报名的用户数
-            Long applyUserCount = postApplyMapper.selectCount(
-                    new QueryWrapper<PostApply>()
-                            .ge("apply_time", dayStart)
-                            .le("apply_time", dayEnd)
+                            .ge("created_time", dayStart)
+                            .le("created_time", dayEnd)),
+                    postApplyMapper.selectObjs(new QueryWrapper<PostApply>()
                             .select("DISTINCT applicant_id")
-            );
+                            .ge("apply_time", dayStart)
+                            .le("apply_time", dayEnd)));
 
             Map<String, Object> item = new HashMap<>();
             item.put("date", date.toString());
-            item.put("count", postUserCount + applyUserCount);
+            item.put("count", activeCount);
             result.add(item);
         }
 
@@ -234,7 +267,7 @@ public class StatsServiceImpl implements StatsService {
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate today = LocalDate.now();
 
-        for (int i = days - 1; i >= 0; i--) {
+        for (int i = clampDays(days) - 1; i >= 0; i--) {
             LocalDate date = today.minusDays(i);
             LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
 
@@ -260,7 +293,7 @@ public class StatsServiceImpl implements StatsService {
 
         // 遍历每一天作为"注册基准日"，计算该日新增用户的后续留存
         // 注意：距离今天不足 N 天的日期不计算 N 日留存（数据不完整）
-        for (int i = days - 1; i >= 0; i--) {
+        for (int i = clampDays(days) - 1; i >= 0; i--) {
             LocalDate cohortDate = today.minusDays(i);
             LocalDateTime cohortStart = LocalDateTime.of(cohortDate, LocalTime.MIN);
             LocalDateTime cohortEnd = LocalDateTime.of(cohortDate, LocalTime.MAX);
@@ -404,6 +437,63 @@ public class StatsServiceImpl implements StatsService {
         return item;
     }
 
+    // ===== 举报处理统计（缺口#4）=====
+
+    /**
+     * 举报处理统计：总量/已处理/有效/待处理 + 处理率 + 平均处理时长 + 近 N 天趋势
+     *
+     * <p>口径说明：原"审核时效统计"随人工审核取消而失效，改为"举报处理时效"，
+     * 用于回答"举报有没有人管、处理快不快"。</p>
+     */
+    @Override
+    public ReportStatsVO getReportStats(int days) {
+        days = clampDays(days);
+
+        ReportStatsVO vo = new ReportStatsVO();
+        long total = reportMapper.selectCount(new LambdaQueryWrapper<Report>());
+        long handled = reportMapper.selectCount(
+                new LambdaQueryWrapper<Report>().ne(Report::getStatus, Report.STATUS_PENDING));
+        long valid = reportMapper.selectCount(
+                new LambdaQueryWrapper<Report>().eq(Report::getStatus, Report.STATUS_VALID));
+        long pending = reportMapper.selectCount(
+                new LambdaQueryWrapper<Report>().eq(Report::getStatus, Report.STATUS_PENDING));
+
+        vo.setTotalReports(total);
+        vo.setHandledReports(handled);
+        vo.setValidReports(valid);
+        vo.setPendingReports(pending);
+        // 处理率：总数为 0 时记为 0（避免除零）
+        vo.setHandledRate(total == 0 ? 0.0 : Math.round(handled * 1000.0 / total) / 10.0);
+
+        // 平均处理时长（小时，保留 1 位）：无已处理数据时返回 null，前端显示"—"
+        Double avgSeconds = reportMapper.avgHandleSeconds();
+        vo.setAvgHandleHours(avgSeconds == null ? null : Math.round(avgSeconds / 360.0) / 10.0);
+
+        // 近 N 天每日举报量：补齐没有举报的日期为 0，保证折线图连续
+        LocalDate today = LocalDate.now();
+        LocalDateTime start = LocalDateTime.of(today.minusDays(days - 1L), LocalTime.MIN);
+        Map<String, Long> countByDate = new HashMap<>();
+        for (Map<String, Object> row : reportMapper.countDailySince(start)) {
+            Object dateValue = row.get("d");
+            Object countValue = row.get("c");
+            if (dateValue != null) {
+                countByDate.put(String.valueOf(dateValue),
+                        countValue instanceof Number ? ((Number) countValue).longValue() : 0L);
+            }
+        }
+        List<Map<String, Object>> trend = new ArrayList<>(days);
+        for (int i = days - 1; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
+            Map<String, Object> item = new HashMap<>();
+            item.put("date", date);
+            item.put("count", countByDate.getOrDefault(date, 0L));
+            trend.add(item);
+        }
+        vo.setTrend(trend);
+
+        return vo;
+    }
+
     // ===== CSV 导出 =====
 
     @Override
@@ -481,6 +571,11 @@ public class StatsServiceImpl implements StatsService {
             Object val = fields[i];
             if (val != null) {
                 String str = val.toString();
+                // 防 CSV 公式注入：以 = + - @ 或制表符/回车开头的文本前置单引号，
+                // 避免被 Excel/WPS 当作公式执行（数字类型不受影响）
+                if (!(val instanceof Number) && !str.isEmpty() && "=+-@\t\r".indexOf(str.charAt(0)) >= 0) {
+                    str = "'" + str;
+                }
                 if (str.contains(",") || str.contains("\"") || str.contains("\n")) {
                     sb.append('"').append(str.replace("\"", "\"\"")).append('"');
                 } else {

@@ -9,6 +9,11 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
     default-property-inclusion: non_null
+  # 上传文件大小限制（与 FileController 的 2MB 校验保持一致）
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
 
 # MyBatis-Plus 配置
 mybatis-plus:
@@ -30,8 +35,15 @@ mybatis-plus:
 
 # JWT 配置
 jwt:
-  # 密钥从环境变量读取；未设置时使用开发默认值（行为同旧版）
-  # 生产环境必须通过 JWT_SECRET 环境变量覆盖，本地开发请把真实密钥填在 application-local.yml（已被 gitignore）
-  secret: ${JWT_SECRET:BuddySchoolDevSecretKey2024ForJwtTokenGenerationAndValidation}
+  # 密钥只从环境变量 JWT_SECRET 或本地 application-local.yml（已被 gitignore）读取，代码中不再提供任何默认密钥。
+  # 未配置或不足 32 字符时应用启动直接失败，防止用公开/弱密钥签发 Token。
+  secret: ${JWT_SECRET:}
   # Token 过期时间：7天（毫秒）
   expiration: 604800000
+
+# 辅助功能存储（登录失败锁定 / 浏览量去重 / 上传频率限制 / 举报去重）
+# 默认 mysql：零外部依赖，任意电脑装好 MySQL 即可运行；
+# 如数据量大或觉得响应偏慢，可改为 redis（需自行启动 Redis，详见 README「辅助数据存储」章节）
+app:
+  aux:
+    store: mysql

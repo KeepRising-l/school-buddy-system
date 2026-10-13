@@ -10,6 +10,8 @@ import com.buddy.module.post.dto.PostDetailVO;
 import com.buddy.module.post.dto.request.PostCreateRequest;
 import com.buddy.module.post.service.CommentService;
 import com.buddy.module.post.service.PostService;
+import com.buddy.common.annotation.RateLimit;
+import com.buddy.common.annotation.RequireLogin;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,6 +40,8 @@ public class PostController {
     /**
      * 发布组局
      */
+    @RequireLogin
+    @RateLimit(value = "post:create", max = 5, windowHours = 1)
     @PostMapping("/create")
     public R<Long> createPost(@RequestBody @Valid PostCreateRequest request) {
         Long userId = UserContext.getUserId();
@@ -58,6 +62,7 @@ public class PostController {
     /**
      * 取消组局
      */
+    @RequireLogin
     @PostMapping("/cancel/{id}")
     public R<Void> cancelPost(@PathVariable Long id) {
         Long userId = UserContext.getUserId();
@@ -69,6 +74,8 @@ public class PostController {
      * 发表评论
      * body: {postId: 1, content: "xxx"}
      */
+    @RequireLogin
+    @RateLimit(value = "post:comment", max = 20, windowHours = 1)
     @PostMapping("/comment")
     public R<Void> addComment(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();

@@ -23,8 +23,11 @@ public interface NotificationService {
 
     /**
      * 获取用户的通知列表（分页，按时间倒序）
+     *
+     * @param type 通知类型筛选（见 Notification.TYPE_* 常量；支持逗号分隔的多类型；
+     *             为空表示全部）
      */
-    IPage<NotificationVO> getNotifications(Long userId, int page, int size);
+    IPage<NotificationVO> getNotifications(Long userId, int page, int size, String type);
 
     /**
      * 获取用户未读通知数（角标）

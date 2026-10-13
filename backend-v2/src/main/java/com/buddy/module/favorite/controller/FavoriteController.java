@@ -7,6 +7,7 @@ import com.buddy.common.result.R;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.favorite.service.FavoriteService;
 import com.buddy.module.post.dto.PostVO;
+import com.buddy.common.annotation.RequireLogin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,6 +34,7 @@ public class FavoriteController {
      * 收藏帖子
      * body: {postId: 1}
      */
+    @RequireLogin
     @PostMapping("/add")
     public R<Void> add(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
@@ -44,6 +46,7 @@ public class FavoriteController {
      * 取消收藏
      * body: {postId: 1}
      */
+    @RequireLogin
     @PostMapping("/cancel")
     public R<Void> cancel(@RequestBody Map<String, Object> body) {
         Long userId = UserContext.getUserId();
@@ -69,6 +72,7 @@ public class FavoriteController {
     /**
      * 我的收藏（分页）
      */
+    @RequireLogin
     @GetMapping("/list")
     public R<IPage<PostVO>> getMyFavorites(
             @RequestParam(defaultValue = "1") int page,
@@ -80,6 +84,7 @@ public class FavoriteController {
     /**
      * 是否已收藏 + 收藏数
      */
+    @RequireLogin
     @GetMapping("/status/{postId}")
     public R<Map<String, Object>> getStatus(@PathVariable Long postId) {
         Long userId = UserContext.getUserId();

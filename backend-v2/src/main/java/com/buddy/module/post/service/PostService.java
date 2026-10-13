@@ -25,7 +25,7 @@ public interface PostService {
     void cancelPost(Long userId, Long postId);
 
     /**
-     * 增加浏览量（Redis去重）
+     * 增加浏览量（辅助存储去重：同一用户 10 分钟内只计一次；默认 MySQL，可切换 Redis）
      */
     void incrementViewCount(Long postId, Long userId);
 }

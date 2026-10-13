@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.hutool.core.util.StrUtil;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.notification.dto.NotificationVO;
@@ -14,6 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -44,11 +48,21 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
-    public IPage<NotificationVO> getNotifications(Long userId, int page, int size) {
+    public IPage<NotificationVO> getNotifications(Long userId, int page, int size, String type) {
+        // 类型筛选：支持逗号分隔的多类型（如 APPLY_NEW,APPLY_RESULT 归为"报名"一类）；
+        // 为空表示不过滤（保留原有行为）
+        List<String> typeList = StrUtil.isBlank(type)
+                ? Collections.emptyList()
+                : Arrays.stream(type.split(","))
+                        .map(String::trim)
+                        .filter(StrUtil::isNotBlank)
+                        .collect(Collectors.toList());
+
         IPage<Notification> notificationPage = notificationMapper.selectPage(
                 new Page<>(page, size),
                 new LambdaQueryWrapper<Notification>()
                         .eq(Notification::getUserId, userId)
+                        .in(!typeList.isEmpty(), Notification::getType, typeList)
                         .orderByDesc(Notification::getCreatedTime)
         );
 

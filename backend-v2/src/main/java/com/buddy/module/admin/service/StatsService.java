@@ -1,5 +1,6 @@
 package com.buddy.module.admin.service;
 
+import com.buddy.module.admin.dto.ReportStatsVO;
 import com.buddy.module.admin.dto.StatsVO;
 
 import java.io.IOException;
@@ -29,6 +30,11 @@ public interface StatsService {
     List<Map<String, Object>> getRetention(int days);
 
     List<Map<String, Object>> getFunnel(int days);
+
+    /**
+     * 举报处理统计（缺口#4）：总量/已处理/有效/待处理、处理率、平均处理时长、近 N 天趋势
+     */
+    ReportStatsVO getReportStats(int days);
 
     void exportUsers(Writer writer) throws IOException;
 

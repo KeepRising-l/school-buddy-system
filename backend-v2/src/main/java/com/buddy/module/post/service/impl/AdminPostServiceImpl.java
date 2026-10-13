@@ -2,6 +2,7 @@ package com.buddy.module.post.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buddy.common.constant.ApplyStatus;
@@ -86,9 +87,15 @@ public class AdminPostServiceImpl implements AdminPostService {
         if (post == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
         }
-        // 下架即将帖子状态设为CANCELLED
-        post.setStatus(PostStatus.CANCELLED);
-        postMapper.updateById(post);
+        // 幂等下架：带预期旧状态的条件更新，未取消的帖子才能置为CANCELLED。
+        // 重复/并发下架（如多个举报同时处置）只会成功一次，避免重复扣减人数、重复通知
+        int updated = postMapper.update(null, new LambdaUpdateWrapper<Post>()
+                .eq(Post::getId, postId)
+                .ne(Post::getStatus, PostStatus.CANCELLED)
+                .set(Post::getStatus, PostStatus.CANCELLED));
+        if (updated == 0) {
+            return; // 已处于取消状态，无需重复执行联动
+        }
 
         // 联动：取消该帖所有未完结报名（否则报名记录悬挂"已通过"，用户卡死）
         List<PostApply> applies = postApplyMapper.selectList(
@@ -97,14 +104,19 @@ public class AdminPostServiceImpl implements AdminPostService {
                         .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
         );
         for (PostApply apply : applies) {
+            // 条件更新：并发下同一条报名只处理一次
+            int applyUpdated = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                    .eq(PostApply::getId, apply.getId())
+                    .in(PostApply::getStatus, ApplyStatus.PENDING, ApplyStatus.APPROVED, ApplyStatus.WAITLIST)
+                    .set(PostApply::getStatus, ApplyStatus.CANCELLED)
+                    .set(PostApply::getHandleTime, LocalDateTime.now()));
+            if (applyUpdated == 0) {
+                continue;
+            }
             // 恢复名额：已通过（APPROVED）的报名取消后 current_people -1，保持口径一致
             if (ApplyStatus.APPROVED.equals(apply.getStatus())) {
                 postMapper.decrementCurrentPeople(postId);
             }
-            apply.setStatus(ApplyStatus.CANCELLED);
-            apply.setHandleTime(LocalDateTime.now());
-            postApplyMapper.updateById(apply);
-
             // 通知被取消报名的用户：不能"悄悄被取消"，让用户知道组局被下架
             notificationService.send(apply.getApplicantId(), Notification.TYPE_POST_TAKEDOWN,
                     "组局已下架",

@@ -1,6 +1,7 @@
 package com.buddy.interceptor;
 
 import com.buddy.common.annotation.RequireAdmin;
+import com.buddy.common.annotation.RequireLogin;
 import com.buddy.common.context.UserContext;
 import com.buddy.common.jwt.JwtUtils;
 import com.buddy.module.user.entity.User;
@@ -49,13 +50,14 @@ public class JwtInterceptor implements HandlerInterceptor {
         }
 
         // 可选登录：无 Token 的请求按游客放行（广场/详情等公开接口需要游客可访问，
-        // 同时登录用户带上 Token 时能解析出身份）
+        // 同时登录用户带上 Token 时能解析出身份）；@RequireLogin / @RequireAdmin 接口必须登录
         if (token == null || token.isEmpty()) {
-            // 管理接口必须登录
             if (handler instanceof HandlerMethod) {
-                RequireAdmin requireAdmin = ((HandlerMethod) handler).getMethodAnnotation(RequireAdmin.class);
-                if (requireAdmin != null) {
-                    log.warn("未登录访问管理接口: {}", request.getRequestURI());
+                HandlerMethod handlerMethod = (HandlerMethod) handler;
+                boolean needLogin = handlerMethod.getMethodAnnotation(RequireAdmin.class) != null
+                        || handlerMethod.getMethodAnnotation(RequireLogin.class) != null;
+                if (needLogin) {
+                    log.warn("未登录访问受限接口: {} {}", request.getMethod(), request.getRequestURI());
                     writeUnauthorized(response, "未登录，请先登录");
                     return false;
                 }

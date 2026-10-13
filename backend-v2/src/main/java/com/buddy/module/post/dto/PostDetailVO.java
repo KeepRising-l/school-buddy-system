@@ -37,6 +37,16 @@ public class PostDetailVO extends PostVO {
     private Long myApplyId;
 
     /**
+     * 发布者联系方式（手机号）。
+     * 仅当查看者是发布者本人，或其报名已被通过（APPROVED/ATTENDED）时才返回，
+     * 其余情况为 null（前端提示"报名通过后可查看"）。
+     */
+    private String publisherContact;
+
+    /** 联系方式是否已解锁（查看者是否为发布者/已通过报名者） */
+    private Boolean contactVisible;
+
+    /**
      * 已报名用户信息
      */
     @Data
@@ -45,6 +55,10 @@ public class PostDetailVO extends PostVO {
         private String nickname;
         private String avatar;
         private Integer creditLevel;
+        /**
+         * 联系方式（手机号）。仅对"发布者"和"同为已通过报名的参与者"返回，其余为 null。
+         */
+        private String contact;
     }
 
     /**

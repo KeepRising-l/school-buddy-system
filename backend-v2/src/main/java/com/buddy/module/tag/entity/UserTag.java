@@ -25,7 +25,7 @@ public class UserTag {
     /** 标签ID */
     private Long tagId;
 
-    /** 自评段位：1青铜 2白银 3黄金 4钻石 5王者 */
+    /** 自评段位：1萌新 2小白 3熟手 4高手 5宗师 */
     private Integer selfLevel;
 
     @TableField(fill = FieldFill.INSERT)

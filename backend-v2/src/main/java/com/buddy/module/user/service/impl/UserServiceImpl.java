@@ -9,6 +9,7 @@ import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.constant.LevelTagCategories;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.jwt.JwtUtils;
+import com.buddy.common.store.AuxStore;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.apply.dto.ApplyVO;
 import com.buddy.module.apply.entity.PostApply;
@@ -35,18 +36,17 @@ import com.buddy.module.user.mapper.UserMapper;
 import com.buddy.module.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -81,7 +81,7 @@ public class UserServiceImpl implements UserService {
     private JwtUtils jwtUtils;
 
     @Autowired
-    private StringRedisTemplate redisTemplate;
+    private AuxStore auxStore;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -170,18 +170,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public String login(LoginRequest request) {
-        // 检查账号是否被锁定（Redis 不可用时 fail-closed）
+        // 检查账号是否被锁定（辅助存储不可用时 fail-closed）
         String lockKey = LOGIN_FAIL_KEY + request.getAccount();
         try {
-            String failCountStr = redisTemplate.opsForValue().get(lockKey);
-            if (failCountStr != null && Integer.parseInt(failCountStr) >= MAX_LOGIN_FAIL) {
+            Long failCount = auxStore.get(lockKey);
+            if (failCount != null && failCount >= MAX_LOGIN_FAIL) {
                 throw new BusinessException("登录失败次数过多，账号已锁定" + LOCK_MINUTES + "分钟，请稍后再试");
             }
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            // Redis 不可用时采取 fail-closed：拒绝登录而不是跳过锁定检查
-            log.error("Redis不可用，登录安全检查异常", e);
+            // 辅助存储不可用时采取 fail-closed：拒绝登录而不是跳过锁定检查
+            log.error("登录安全检查异常（辅助存储不可用）", e);
             throw new BusinessException("系统繁忙，请稍后重试");
         }
 
@@ -216,9 +216,9 @@ public class UserServiceImpl implements UserService {
 
         // 登录成功，清除失败计数
         try {
-            redisTemplate.delete(lockKey);
+            auxStore.delete(lockKey);
         } catch (Exception e) {
-            // Redis不可用，跳过
+            // 辅助存储不可用，跳过
         }
 
         // 生成JWT Token
@@ -226,17 +226,16 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 增加登录失败计数（Redis不可用时静默跳过）
+     * 增加登录失败计数（辅助存储不可用时静默跳过）
      * 每次失败都续期锁定时间（从最后一次失败起算）
      */
     private void incrementLoginFail(String lockKey) {
         try {
-            Long count = redisTemplate.opsForValue().increment(lockKey);
-            if (count != null) {
-                redisTemplate.expire(lockKey, LOCK_MINUTES, TimeUnit.MINUTES);
-            }
+            Duration lockDuration = Duration.ofMinutes(LOCK_MINUTES);
+            auxStore.increment(lockKey, lockDuration);
+            auxStore.expire(lockKey, lockDuration);
         } catch (Exception e) {
-            log.error("Redis不可用，登录失败计数异常", e);
+            log.error("登录失败计数异常（辅助存储不可用）", e);
         }
     }
 
@@ -300,7 +299,7 @@ public class UserServiceImpl implements UserService {
             vo.setName(tag.getName());
             vo.setDescription(tag.getDescription());
             vo.setSortOrder(tag.getSortOrder());
-            // 无段位概念的项目 selfLevel 置 0，避免前端误显示"青铜"默认值
+            // 无段位概念的项目 selfLevel 置 0，避免前端误显示"萌新"默认值
             boolean hasLevel = LevelTagCategories.contains(tag.getCategory());
             vo.setHasLevel(hasLevel);
             vo.setSelfLevel(hasLevel ? levelMap.getOrDefault(tag.getId(), 1) : 0);

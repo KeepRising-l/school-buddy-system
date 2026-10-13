@@ -1,9 +1,12 @@
 package com.buddy.module.file.controller;
 
+import com.buddy.common.annotation.RequireLogin;
 import com.buddy.common.context.UserContext;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.R;
+import com.buddy.common.store.AuxStore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.UUID;
 
 /**
@@ -32,9 +36,22 @@ public class FileController {
     /** 最大文件大小：2MB */
     private static final long MAX_SIZE = 2 * 1024 * 1024;
 
+    /** 上传频率限制：同一用户每窗口最多上传次数 */
+    private static final int RATE_LIMIT_MAX = 20;
+
+    /** 上传频率限制窗口（分钟） */
+    private static final long RATE_LIMIT_WINDOW_MINUTES = 60;
+
+    /** 频率限制缓存前缀 */
+    private static final String RATE_LIMIT_KEY = "upload:rate:";
+
+    @Autowired
+    private AuxStore auxStore;
+
     /**
-     * 上传头像
+     * 上传头像（登录后使用）
      */
+    @RequireLogin
     @PostMapping("/upload")
     public R<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Long userId = UserContext.getUserId();
@@ -49,13 +66,18 @@ public class FileController {
             throw new BusinessException("文件大小不能超过2MB");
         }
 
-        // 校验文件类型
+        // 校验声明的 Content-Type
         String contentType = file.getContentType();
         if (!isAllowedType(contentType)) {
             throw new BusinessException("仅支持jpg/png格式图片");
         }
 
-        // 魔数校验：Content-Type 可被伪造，需验证文件内容的真实类型
+        // 频率限制：防止同一账号高频上传
+        checkRateLimit(userId);
+
+        // 魔数校验：Content-Type 与文件名都不可信，按文件内容识别真实类型，
+        // 扩展名由识别结果决定（不信任客户端文件名，防止伪装扩展名）
+        String extension;
         try {
             byte[] magicBytes = new byte[4];
             int read = file.getInputStream().read(magicBytes, 0, 4);
@@ -70,7 +92,11 @@ public class FileController {
                     && magicBytes[1] == 0x50
                     && magicBytes[2] == 0x4E
                     && magicBytes[3] == 0x47;
-            if (!isJpeg && !isPng) {
+            if (isJpeg) {
+                extension = ".jpg";
+            } else if (isPng) {
+                extension = ".png";
+            } else {
                 throw new BusinessException("仅支持jpg/png格式图片");
             }
         } catch (BusinessException e) {
@@ -80,11 +106,7 @@ public class FileController {
             throw new BusinessException("文件读取失败");
         }
 
-        // 生成文件名
-        String originalFilename = file.getOriginalFilename();
-        String extension = originalFilename != null && originalFilename.contains(".")
-                ? originalFilename.substring(originalFilename.lastIndexOf("."))
-                : ".jpg";
+        // 生成随机文件名（不保留任何客户端文件名信息）
         String newFilename = UUID.randomUUID().toString().replace("-", "") + extension;
 
         // 保存文件（解析为绝对路径：相对路径会被 Servlet 容器解析到 multipart 临时目录，
@@ -106,6 +128,24 @@ public class FileController {
         String url = "/uploads/avatar/" + newFilename;
         log.info("头像上传成功: userId={}, url={}", userId, url);
         return R.ok(url);
+    }
+
+    /**
+     * 上传频率限制（辅助存储计数，每用户每小时限次；默认 MySQL，可切换 Redis）
+     * 辅助存储不可用时记录告警后放行，避免其故障导致上传功能整体不可用
+     */
+    private void checkRateLimit(Long userId) {
+        String key = RATE_LIMIT_KEY + userId;
+        try {
+            long count = auxStore.increment(key, Duration.ofMinutes(RATE_LIMIT_WINDOW_MINUTES));
+            if (count > RATE_LIMIT_MAX) {
+                throw new BusinessException("上传过于频繁（每小时最多" + RATE_LIMIT_MAX + "次），请稍后再试");
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("上传频率限制不可用（辅助存储异常），本次放行: userId={}, error={}", userId, e.getMessage());
+        }
     }
 
     /**

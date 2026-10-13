@@ -20,6 +20,9 @@ import java.util.Date;
 @Component
 public class JwtUtils {
 
+    /** HS256 要求密钥不少于 256 bit（32 字节） */
+    private static final int MIN_SECRET_BYTES = 32;
+
     @Value("${jwt.secret}")
     private String secret;
 
@@ -30,7 +33,17 @@ public class JwtUtils {
 
     @jakarta.annotation.PostConstruct
     public void init() {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        // 密钥缺失或不达标时直接启动失败，避免静默使用可预测的密钥签发 Token
+        if (secret == null || secret.trim().isEmpty()) {
+            throw new IllegalStateException(
+                    "JWT 密钥未配置：请通过环境变量 JWT_SECRET 或本地 application-local.yml 设置（至少 32 字符）");
+        }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "JWT 密钥长度不足：当前 " + keyBytes.length + " 字节，HS256 至少需要 " + MIN_SECRET_BYTES + " 字节");
+        }
+        this.key = Keys.hmacShaKeyFor(keyBytes);
     }
 
     /**
