@@ -45,8 +45,8 @@ INSERT INTO `post` (`id`, `publisher_id`, `title`, `category`, `tag_ids`, `start
 -- 三、招募中（RECRUITING）- 10 条（即将开始）
 -- ------------------------------------------------------------
 INSERT INTO `post` (`id`, `publisher_id`, `title`, `category`, `tag_ids`, `start_time`, `end_time`, `location`, `max_people`, `current_people`, `require_level`, `require_gender`, `description`, `status`, `view_count`, `like_count`, `is_audit_pass`) VALUES
-(112, 4,  '周末篮球3v3局',       '球类', '1',   NOW() + INTERVAL 1 DAY,      NOW() + INTERVAL 1 DAY + INTERVAL 2 HOUR,   '东区篮球场', 6, 2, 3, 0, '周六下午篮球局，黄金以上优先', 'RECRUITING', 34, 2, 1),
-(113, 5,  '英雄联盟开黑',        '电竞', '6',   NOW() + INTERVAL 1 DAY,      NOW() + INTERVAL 1 DAY + INTERVAL 3 HOUR,   '线上-英雄联盟', 5, 2, 4, 0, '晚上开黑上分，钻石段位来', 'RECRUITING', 45, 3, 1),
+(112, 4,  '周末篮球3v3局',       '球类', '1',   NOW() + INTERVAL 1 DAY,      NOW() + INTERVAL 1 DAY + INTERVAL 2 HOUR,   '东区篮球场', 6, 2, 3, 0, '周六下午篮球局，熟手以上优先', 'RECRUITING', 34, 2, 1),
+(113, 5,  '英雄联盟开黑',        '电竞', '6',   NOW() + INTERVAL 1 DAY,      NOW() + INTERVAL 1 DAY + INTERVAL 3 HOUR,   '线上-英雄联盟', 5, 2, 4, 0, '晚上开黑上分，高手段位来', 'RECRUITING', 45, 3, 1),
 (114, 6,  '晨跑团',              '跑步', '11',  NOW() + INTERVAL 2 DAY,      NOW() + INTERVAL 2 DAY + INTERVAL 1 HOUR,   '操场', 10, 3, 0, 0, '周二早上晨跑，欢迎新手', 'RECRUITING', 23, 1, 1),
 (115, 7,  '周末剧本杀-年轮',     '桌游', '8',   NOW() + INTERVAL 2 DAY,      NOW() + INTERVAL 2 DAY + INTERVAL 4 HOUR,   '南门剧本杀店', 6, 2, 0, 0, '口碑本，缺4人，费用AA', 'RECRUITING', 89, 6, 1),
 (116, 8,  '羽毛球混双',          '球类', '2',   NOW() + INTERVAL 3 DAY,      NOW() + INTERVAL 3 DAY + INTERVAL 2 HOUR,   '体育馆羽毛球场', 4, 1, 0, 1, '混双局，欢迎女生报名', 'RECRUITING', 28, 2, 1),

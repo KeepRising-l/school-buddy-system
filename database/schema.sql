@@ -34,7 +34,7 @@ CREATE TABLE `sys_user` (
 -- -----------------------------------------------------
 -- 2. 兴趣标签表（由管理员维护）
 --    category: 分类，如 篮球/羽毛球/王者荣耀/桌游
---    level:    段位 1青铜 2白银 3黄金 4钻石 5王者
+--    level:    段位 1萌新 2小白 3熟手 4高手 5宗师
 -- -----------------------------------------------------
 DROP TABLE IF EXISTS `interest_tag`;
 CREATE TABLE `interest_tag` (
@@ -86,13 +86,13 @@ CREATE TABLE `post` (
     `status`         VARCHAR(24)   NOT NULL DEFAULT 'RECRUITING',
     `view_count`     INT           DEFAULT 0,
     `like_count`     INT           DEFAULT 0,
-    `is_audit_pass`  TINYINT       DEFAULT 0             COMMENT '审核状态 0待审核 1已通过 2已拒绝（先审后发）',
+    `is_audit_pass`  TINYINT       DEFAULT 0             COMMENT '1正常 2已下架（先发后审；0废弃不用）',
     `created_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `updated_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`        TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     KEY `idx_publisher` (`publisher_id`),
     KEY `idx_status_time` (`status`, `start_time`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='组局帖子表';
 
 -- -----------------------------------------------------
@@ -109,10 +109,10 @@ CREATE TABLE `post_apply` (
     `apply_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `handle_time`  DATETIME      DEFAULT NULL,
     `remark`       VARCHAR(255)  DEFAULT NULL,
+    `deleted`      TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_applicant` (`post_id`, `applicant_id`),
     KEY `idx_applicant` (`applicant_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='报名表';
 
 -- -----------------------------------------------------
@@ -130,10 +130,10 @@ CREATE TABLE `review` (
     `reply_content`  VARCHAR(500)  DEFAULT NULL       COMMENT '被评价人的回复（互评解释）',
     `reply_time`     DATETIME      DEFAULT NULL       COMMENT '回复时间',
     `created_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `deleted`        TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_reviewer_target` (`post_id`, `reviewer_id`, `target_user_id`),
     KEY `idx_target` (`target_user_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评价表';
 
 -- -----------------------------------------------------
@@ -146,9 +146,9 @@ CREATE TABLE `post_comment` (
     `user_id`      BIGINT        NOT NULL,
     `content`      VARCHAR(500)  NOT NULL,
     `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `deleted`      TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     KEY `idx_post` (`post_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------
@@ -181,10 +181,10 @@ CREATE TABLE `favorite` (
     `user_id`      BIGINT        NOT NULL             COMMENT '收藏用户',
     `post_id`      BIGINT        NOT NULL             COMMENT '帖子',
     `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `deleted`      TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_post` (`user_id`, `post_id`),
     KEY `idx_post` (`post_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏表';
 
 -- -----------------------------------------------------
@@ -248,13 +248,23 @@ CREATE TABLE `sys_announcement` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统公告表';
 
 -- -----------------------------------------------------
--- 初始数据：一个管理员 + 若干兴趣标签 + 测试学生
--- 密码 123456 的 BCrypt: $2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka
+-- 13. 辅助键值表（登录锁定/浏览去重/上传限频/举报去重；默认替代 Redis）
 -- -----------------------------------------------------
-INSERT INTO `sys_user` (`student_no`, `phone`, `password`, `nickname`, `username`, `college`, `is_admin`)
-VALUES ('admin001', '13800000000', '$2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka', '系统管理员', 'admin001', '信息学院', 1),
-       ('20240001', '13800000001', '$2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka', '小明', '20240001', '计算机学院', 0),
-       ('20240002', '13800000002', '$2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka', '小红', '20240002', '体育学院', 0);
+DROP TABLE IF EXISTS `aux_kv`;
+CREATE TABLE `aux_kv` (
+    `k`           VARCHAR(128) NOT NULL               COMMENT '键',
+    `v`           BIGINT       NOT NULL DEFAULT 1     COMMENT '值（计数）',
+    `expire_time` DATETIME     NOT NULL               COMMENT '过期时间',
+    PRIMARY KEY (`k`),
+    KEY `idx_expire` (`expire_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='辅助键值表';
+
+
+-- -----------------------------------------------------
+-- 基础数据：兴趣标签（不包含任何演示账号）
+-- 演示账号（含公开口令）只在本地/测试重置脚本 database/init-all.sql 中；
+-- 管理员账号请在部署时按需创建（密码需为 BCrypt 哈希，禁止使用公开口令）。
+-- -----------------------------------------------------
 
 INSERT INTO `interest_tag` (`category`, `name`, `sort_order`) VALUES
 ('球类', '篮球', 1),

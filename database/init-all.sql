@@ -1,9 +1,11 @@
 -- ============================================================
 -- 校园兴趣搭子预约系统 - 一站式数据库初始化脚本（V1.1）
 -- 生成日期: 2026-08-15
--- 内容: 建库 + 建表(10张) + 初始数据 + 测试数据(45用户/30帖子)
+-- 内容: 建库 + 建表(13张) + 初始数据 + 测试数据(45用户/30帖子)
 -- 用法:  mysql -u root -p < database/init-all.sql
 -- 注意: 会 DROP 重建所有表，已有数据将被清空！
+-- 范围: 仅供本地开发/测试环境重置数据库使用，严禁在真实/生产数据库执行；
+--       脚本包含公开口令的演示账号（admin001/123456），生产环境不要导入本脚本。
 -- ============================================================
 CREATE DATABASE IF NOT EXISTS school_buddy DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `school_buddy`;
@@ -44,7 +46,7 @@ CREATE TABLE `sys_user` (
 -- -----------------------------------------------------
 -- 2. 兴趣标签表（由管理员维护）
 --    category: 分类，如 篮球/羽毛球/王者荣耀/桌游
---    level:    段位 1青铜 2白银 3黄金 4钻石 5王者
+--    level:    段位 1萌新 2小白 3熟手 4高手 5宗师
 -- -----------------------------------------------------
 DROP TABLE IF EXISTS `interest_tag`;
 CREATE TABLE `interest_tag` (
@@ -96,13 +98,13 @@ CREATE TABLE `post` (
     `status`         VARCHAR(24)   NOT NULL DEFAULT 'RECRUITING',
     `view_count`     INT           DEFAULT 0,
     `like_count`     INT           DEFAULT 0,
-    `is_audit_pass`  TINYINT       DEFAULT 0             COMMENT '审核状态 0待审核 1已通过 2已拒绝（先审后发）',
+    `is_audit_pass`  TINYINT       DEFAULT 0             COMMENT '1正常 2已下架（先发后审；0废弃不用）',
     `created_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `updated_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`        TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     KEY `idx_publisher` (`publisher_id`),
     KEY `idx_status_time` (`status`, `start_time`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='组局帖子表';
 
 -- -----------------------------------------------------
@@ -119,10 +121,10 @@ CREATE TABLE `post_apply` (
     `apply_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `handle_time`  DATETIME      DEFAULT NULL,
     `remark`       VARCHAR(255)  DEFAULT NULL,
+    `deleted`      TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_applicant` (`post_id`, `applicant_id`),
     KEY `idx_applicant` (`applicant_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='报名表';
 
 -- -----------------------------------------------------
@@ -140,10 +142,10 @@ CREATE TABLE `review` (
     `reply_content`  VARCHAR(500)  DEFAULT NULL       COMMENT '被评价人的回复（互评解释）',
     `reply_time`     DATETIME      DEFAULT NULL       COMMENT '回复时间',
     `created_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `deleted`        TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_post_reviewer_target` (`post_id`, `reviewer_id`, `target_user_id`),
     KEY `idx_target` (`target_user_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评价表';
 
 -- -----------------------------------------------------
@@ -156,9 +158,9 @@ CREATE TABLE `post_comment` (
     `user_id`      BIGINT        NOT NULL,
     `content`      VARCHAR(500)  NOT NULL,
     `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `deleted`      TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     KEY `idx_post` (`post_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------
@@ -191,10 +193,10 @@ CREATE TABLE `favorite` (
     `user_id`      BIGINT        NOT NULL             COMMENT '收藏用户',
     `post_id`      BIGINT        NOT NULL             COMMENT '帖子',
     `created_time` DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `deleted`      TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_post` (`user_id`, `post_id`),
     KEY `idx_post` (`post_id`)
-    `deleted` TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1已删',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏表';
 
 -- -----------------------------------------------------
@@ -258,7 +260,21 @@ CREATE TABLE `sys_announcement` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统公告表';
 
 -- -----------------------------------------------------
--- 初始数据：一个管理员 + 若干兴趣标签 + 测试学生
+-- 13. 辅助键值表（登录锁定/浏览去重/上传限频/举报去重；默认替代 Redis）
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `aux_kv`;
+CREATE TABLE `aux_kv` (
+    `k`           VARCHAR(128) NOT NULL               COMMENT '键',
+    `v`           BIGINT       NOT NULL DEFAULT 1     COMMENT '值（计数）',
+    `expire_time` DATETIME     NOT NULL               COMMENT '过期时间',
+    PRIMARY KEY (`k`),
+    KEY `idx_expire` (`expire_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='辅助键值表';
+
+
+-- -----------------------------------------------------
+-- 初始数据：演示管理员 + 若干兴趣标签 + 测试学生（仅限本地/测试环境）
+-- admin001 的公开口令为 123456（哈希如下），生产环境禁止使用本脚本
 -- 密码 123456 的 BCrypt: $2a$10$e7ZZEXLXq1W265LW25VN8ecZx47trR8xZB8hBPr7h6n0Kv2Xojfka
 -- -----------------------------------------------------
 INSERT INTO `sys_user` (`student_no`, `phone`, `password`, `nickname`, `username`, `college`, `is_admin`)
@@ -365,10 +381,10 @@ INSERT INTO `user_tag` (`user_id`, `tag_id`, `self_level`) VALUES
 INSERT INTO `post` (`id`, `publisher_id`, `title`, `category`, `tag_ids`, `start_time`, `end_time`, `location`, `max_people`, `current_people`, `require_level`, `require_gender`, `description`, `status`, `view_count`, `like_count`, `is_audit_pass`) VALUES
 
 -- RECRUITING - 正在招募的帖子
-(1, 4,  '周末篮球3v3',       '球类',   '1',    '2026-07-02 14:00:00', '2026-07-02 17:00:00', '东区篮球场',     6, 3, 3, 0, '缺两个队友，求篮球搭子！水平黄金段位以上', 'RECRUITING', 56, 5, 1),
-(2, 10, '王者荣耀五排上分',  '电竞',   '5,6',  '2026-07-01 20:00:00', '2026-07-01 23:00:00', '线上-王者荣耀',  5, 2, 4, 0, '钻石段位以上，来会玩的', 'RECRUITING', 120, 8, 1),
+(1, 4,  '周末篮球3v3',       '球类',   '1',    '2026-07-02 14:00:00', '2026-07-02 17:00:00', '东区篮球场',     6, 3, 3, 0, '缺两个队友，求篮球搭子！水平熟手段位以上', 'RECRUITING', 56, 5, 1),
+(2, 10, '王者荣耀五排上分',  '电竞',   '5,6',  '2026-07-01 20:00:00', '2026-07-01 23:00:00', '线上-王者荣耀',  5, 2, 4, 0, '高手段位以上，来会玩的', 'RECRUITING', 120, 8, 1),
 (3, 14, '羽毛球双打约球',    '球类',   '2',    '2026-07-03 09:00:00', '2026-07-03 11:00:00', '体育馆羽毛球场', 4, 2, 0, 2, '仅限女生，新手友好', 'RECRUITING', 34, 3, 1),
-(4, 7,  '周五剧本杀-月落洼', '桌游',   '8',    '2026-07-04 18:00:00', '2026-07-04 22:00:00', '南门剧本杀店',   5, 1, 0, 0, '经典本，缺4人，费用AA', 'RECRUITING', 89, 6, 0),
+(4, 7,  '周五剧本杀-月落洼', '桌游',   '8',    '2026-07-04 18:00:00', '2026-07-04 22:00:00', '南门剧本杀店',   5, 1, 0, 0, '经典本，缺4人，费用AA', 'RECRUITING', 89, 6, 1),
 
 -- FULL - 已满员，等待开始
 (5, 6,  '英雄联盟内战',      '电竞',   '6',    '2026-07-05 19:00:00', '2026-07-05 22:00:00', '线上-英雄联盟',  5, 5, 0, 0, '5V5内战，目前满员', 'FULL', 45, 4, 1),
@@ -626,7 +642,7 @@ INSERT INTO `post` (`id`, `publisher_id`, `title`, `category`, `tag_ids`, `start
 (18, 46, '摄影扫街：拍校园夕阳',     '摄影',   '18',   '2026-07-02 17:30:00', '2026-07-02 19:00:00', '图书馆门口集合',    8, 2, 0, 0, '喜欢拍照的来！手机也行相机也行，一起拍校园夕阳', 'RECRUITING', 43, 7, 1),
 (19, 35, '晨跑搭子，新手也能跑',     '跑步',   '11',   '2026-07-03 06:30:00', '2026-07-03 07:30:00', '操场',              10, 3, 0, 0, '跑不动可以走！主要是养成早起习惯，配速不限', 'RECRUITING', 38, 4, 1),
 (20, 22, '音乐交流：互相分享歌单',   '音乐',   '17',   '2026-07-04 19:00:00', '2026-07-04 21:00:00', '操场草坪',          10, 2, 0, 0, '带上耳机或小音箱，围坐一圈分享自己喜欢的歌，聊聊音乐', 'RECRUITING', 52, 11, 1),
-(21, 38, '王者荣耀娱乐局',           '电竞',   '5',    '2026-07-01 20:00:00', '2026-07-01 22:00:00', '线上-王者荣耀',     5, 3, 0, 0, '娱乐局不压力！输赢无所谓，开心就好，青铜到星耀都欢迎', 'RECRUITING', 98, 7, 1),
+(21, 38, '王者荣耀娱乐局',           '电竞',   '5',    '2026-07-01 20:00:00', '2026-07-01 22:00:00', '线上-王者荣耀',     5, 3, 0, 0, '娱乐局不压力！输赢无所谓，开心就好，萌新到宗师都欢迎', 'RECRUITING', 98, 7, 1),
 (22, 29, '周末篮球半场养生局',       '球类',   '1',    '2026-07-05 16:00:00', '2026-07-05 18:00:00', '东区篮球场',        6, 2, 0, 0, '养生篮球，出出汗就好，不冲不撞，欢迎新手来玩', 'RECRUITING', 45, 3, 1),
 
 -- 已满员
