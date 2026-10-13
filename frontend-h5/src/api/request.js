@@ -107,6 +107,14 @@ request.interceptors.response.use(
         wordBreak: 'break-word'
       })
     }
+    // 统一可读错误信息：HTTP 层报错（5xx / CORS 403 等）时 Axios 的 error.message 是
+    // "Request failed with status code 500" 这种英文原文，调用方拿它做弹窗提示用户看不懂。
+    // 这里把后端 message 归一化到 error.message（保留 error.response 等原字段，向后兼容）。
+    if (error.response?.data?.message) {
+      error.message = error.response.data.message
+    } else if (!error.response) {
+      error.message = error.code === 'ECONNABORTED' ? '请求超时，请稍后重试' : '网络异常，请检查网络后重试'
+    }
     return Promise.reject(error)
   }
 )

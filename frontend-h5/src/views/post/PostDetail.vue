@@ -726,7 +726,13 @@ const handleAddComment = async () => {
     showToast('评论成功')
     await fetchComments()
   } catch (err) {
-    // 接口层已处理
+    // 关键操作：用弹窗展示后端返回的具体原因（如"该组局已取消，暂不可评论"、"包含违禁词"），
+    // 只在拦截器里弹 toast 的话一闪而过，用户会以为"点了没反应"
+    showDialog({
+      title: '评论发送失败',
+      message: err.message || '请稍后重试',
+      confirmButtonText: '知道了'
+    }).catch(() => {})
   } finally {
     commentSubmitting.value = false
   }
