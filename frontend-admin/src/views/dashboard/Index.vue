@@ -64,7 +64,13 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
+// echarts 按需引入：本页只用到饼图
+import * as echarts from 'echarts/core'
+import { PieChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([PieChart, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
 import { getStatsOverview, getCategoryTop5 } from '@/api/admin'
 
 // 统计概览数据（字段名与后端 StatsVO 对齐：successMatches）

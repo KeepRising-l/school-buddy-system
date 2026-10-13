@@ -193,7 +193,36 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
+// echarts 按需引入：只注册本页用到的图表类型与组件（全量引入约 1MB，按需后大幅减小）
+import * as echarts from 'echarts/core'
+import { BarChart, LineChart, PieChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DatasetComponent,
+  TransformComponent,
+  AxisPointerComponent
+} from 'echarts/components'
+import { LabelLayout, UniversalTransition } from 'echarts/features'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([
+  BarChart,
+  LineChart,
+  PieChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DatasetComponent,
+  TransformComponent,
+  AxisPointerComponent,
+  LabelLayout,
+  UniversalTransition,
+  CanvasRenderer
+])
 import {
   getPostTrend, getSuccessTrend, getCategoryTop5, getCreditDistribution,
   getUserGrowthTrend, getActiveTrend, getRetention, getFunnel, exportStats, getReportStats
