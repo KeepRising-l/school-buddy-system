@@ -1,102 +1,112 @@
-# 校园搭子预约系统 🎓
+# 校园搭子预约系统
 
-一个面向高校学生的**兴趣搭子组局平台**：用户可以发布组局（球类 / 电竞 / 桌游 / 跑步 / 健身 / 学习等），寻找志同道合的伙伴一起参与，并通过评价与信誉分机制维护组局质量。
+一个面向高校学生的**兴趣搭子组局平台**：发布组局（球类 / 电竞 / 桌游 / 跑步 / 健身 / 学习等）、报名审批、满员候补、活动前自动提醒、报名通过后互换联系方式、活动后互评，并用信誉分机制约束守约行为。
 
-> **📦 当前交付物为 `backend-v2/`（2026-09 重构完成）**：Java 17 + Spring Boot 3.3.5，功能与老版等价、接口路径不变、前端零改动，另有增强：逻辑删除+级联（D-007）、取消组局自动通知不扣分（D-008）、通知 7 类（D-011）、55 例单元测试。老版已归档至 `backend-legacy/`（Java 8 + Boot 2.7，仅供追溯）。重构全过程见 `AI-Dev-Workflow/`。
+> **当前交付物：`backend-v2/`（Java 17 + Spring Boot 3.3.5）**，含 135 例单元测试与 CI 流水线。老版后端已归档至 `backend-legacy/`（仅有追溯价值，勿启动）。
+> 文档在 `docs/`：产品需求（PRD） / 功能与技术详解 / 答辩问答准备 / 项目使用文档；另有两份历史设计文档供论文写作参考。
 
-本文件是面向**第一次接触本项目的小白**的启动指南。更详细的分步骤教程（含依赖安装、常见报错排查）见 **`教学文档/00-新手小白从零启动教程.md`**。
+本文件是**面向第一次接触本项目的人**的启动指南。
 
 ---
 
-## 一、这个项目由哪几部分组成？
+## 一、项目由哪几部分组成？
 
 | 部分 | 技术 | 端口 | 作用 |
 |------|------|------|------|
-| `backend-v2/` 后端（当前交付物） | Java 17 + Spring Boot 3.3.5 | **8080** | 提供所有接口（登录、发帖、报名、评价…） |
+| `backend-v2/` 后端 | Java 17 + Spring Boot 3.3.5 | **8080** | 提供所有接口（登录、发帖、报名、评价…） |
 | `frontend-h5/` H5 用户端 | Vue3 + Vant | **3000** | 学生用的手机网页 |
 | `frontend-admin/` 管理端 | Vue3 + Element Plus | **3001** | 管理员用的电脑后台 |
-| MySQL | 数据库 | 3306 | 存所有数据 |
-| Redis | 缓存 | 6379 | 登录失败锁定、浏览量去重等 |
+| MySQL | 数据库 | 3306 | 存所有业务数据 |
+| Redis | （可选） | 6379 | **默认不需要**；仅当把"辅助数据存储"切换为 Redis 时才使用（见第五节） |
 
-> 启动顺序建议：**先 Redis → 再 MySQL → 再后端 → 再前端**。
+> 启动顺序建议：**MySQL → 后端 → 前端**（默认无需 Redis）。
 
 ---
 
-## 二、需要的环境与版本（一定要选对版本）
+## 二、需要的环境与版本
 
 | 软件 | 推荐版本 | 检查命令 |
 |------|---------|---------|
-| **JDK** | **17（LTS）** | `java -version` |
-| **Maven** | **3.6 及以上（3.6.3+）** | `mvn -version` |
-| **MySQL** | **8.0** | 安装时记住 root 密码 |
-| **Redis** | **5.0（Windows 版）** | 见第 4 步 |
-| **Node.js** | **18（推荐 18.17+）** | `node -v` |
-| **npm** | Node 18 自带（9.0+） | `npm -v` |
+| **JDK** | **17（LTS，必须）** | `java -version` |
+| **Maven** | 3.8+ | `mvn -version` |
+| **MySQL** | 8.0 | 安装时记住 root 密码 |
+| **Node.js** | 18+（CI 使用 18，22 亦可） | `node -v` |
+| **npm** | Node 自带 | `npm -v` |
+| Redis | 可选（5.0+） | 默认不需要，见第五节 |
 
-> ⚠️ **JDK、Node 必须按上面的版本装**，版本不对后端/前端会启动失败。
+> JDK 不是 17 后端会启动失败；Node 版本过低前端会装不上依赖。
 
 ---
 
-## 三、数据库账号密码（第 0 步，必做）
+## 三、数据库密码与 JWT 密钥（第 0 步，必做）
 
-为了安全，**项目没有把数据库密码写进仓库**。密码放在一个会被 git 忽略的文件里，你需要自己填一次：
+项目**没有把密码和密钥写进仓库**，需要你在一个会被 git 忽略的文件里自己填一次：
 
-1. 进入 `backend/src/main/resources/`
+1. 进入 `backend-v2/src/main/resources/`
 2. 把文件 `application-local.example.yml` **复制一份**，改名为 `application-local.yml`
-3. 打开它，把 `password` 改成你安装 MySQL 时设置的 **root 密码**：
+3. 打开它，填两处：
    ```yaml
    spring:
      datasource:
        password: 你的MySQL密码   # ← 改成你的 root 密码
-   ```
-4. 如果你的 root 密码正好是 `1234`，文件里已经填好了，直接跳过这步。
 
-> 数据库使用的是 **root 账号**、数据库名 `school_buddy`（见 `application-dev.yml`）。这个文件已在 `.gitignore` 里，不会被提交，密码不会泄露。
+   jwt:
+     secret: 至少32位的随机字符串   # ← 例如一串 32+ 位的字母数字组合
+   ```
+4. 说明：JWT 密钥缺失或不足 32 位时，后端会**拒绝启动**（这是安全设计，防止弱密钥上线）。
+
+> 数据库默认使用 root 账号、库名 `school_buddy`（见 `application-dev.yml`）。`application-local.yml` 已在 `.gitignore` 中，不会提交、不会泄露。
 
 ---
 
-## 四、创建数据库并导入数据（用 Navicat，推荐）
+## 四、创建数据库并导入数据（推荐 Navicat）
 
-`database/init-all.sql` 是一站式脚本：**建库 + 建 10 张表 + 初始数据 + 测试数据**，一次搞定，推荐用 Navicat 导入。
-
-**准备工作**：本地 MySQL 已启动（Windows 服务里看到 MySQL80 在运行，或用 Navicat 能连上 3306 即代表启动成功）。
+`database/init-all.sql` 是一站式脚本：**建库 + 建 13 张表 + 初始数据 + 测试数据**，一次搞定。
 
 **Navicat 导入步骤**：
-1. 打开 **Navicat**，新建连接：主机 `localhost`、端口 `3306`、用户名 `root`、密码填你的 MySQL 密码 → 测试连接成功 → 双击连接名称进入。
-2. 右键连接名（或任意数据库）→ 选择 **「运行 SQL 文件…」**（英文版是 *Run SQL File*）。
-3. 选中 `database/init-all.sql` → 运行。
-4. 运行结束后，刷新，能看到自动创建了一个数据库 **`school_buddy`**，里面有若干张表，说明导入成功。
 
-> 不用手动建库、不用单独导建表脚本和测试数据，一个 `init-all.sql` 全搞定。
-> ⚠️ 该脚本会**清空重建**所有表，重复运行会覆盖已有数据。
+1. 打开 Navicat，新建连接：主机 `localhost`、端口 `3306`、用户名 `root`、密码填你的 MySQL 密码 → 测试连接成功 → 双击进入；
+2. 右键连接名（或任意数据库）→ 选择 **「运行 SQL 文件…」**（英文版 *Run SQL File*）；
+3. 选中 `database/init-all.sql` → 运行；
+4. 运行结束后刷新，能看到自动创建了数据库 **`school_buddy`**，即导入成功。
+
+> ⚠️ 该脚本会**清空重建**所有表，重复运行会覆盖已有数据；仅限本地/测试库使用。
+>
+> 需要更多演示用户时：再执行一次 `database/more-users.sql`（追加 50 个学生账号，含兴趣标签；账号/密码明细见 `docs/测试用户清单.md`，重复执行安全）。
 
 ---
 
-## 五、启动 Redis（必开）
+## 五、辅助数据存储（默认 MySQL，无需 Redis）
 
-后端依赖 Redis（登录失败锁定、浏览量去重），**Redis 没启动，登录功能会不可用**。
+登录失败锁定、浏览量去重、上传频率限制、举报去重这四类"辅助数据"由统一组件承载：**默认使用 MySQL 单表 `aux_kv`，零外部依赖**，因此**不需要安装 Redis**。
 
-- 本项目面向 Windows，Redis 官方不提供 Windows 客户端，推荐用社区维护版：
-  1. 打开 [github.com/tporadowski/redis/releases](https://github.com/tporadowski/redis/releases)
-  2. 下载 `Redis-x64-5.0.14.1.zip`，解压到 `D:\redis`
-  3. 每次启动时，双击里面的 **`redis-server.exe`**
-- 看到类似下面的输出就代表启动成功（**这个黑窗口别关**）：
+- **已有旧数据库升级（一次性）**：在你的 `school_buddy` 库执行下面这段建表语句（用 `init-all.sql` 新导入的库已自带，可跳过）：
+  ```sql
+  CREATE TABLE IF NOT EXISTS `aux_kv` (
+      `k`           VARCHAR(128) NOT NULL COMMENT '键',
+      `v`           BIGINT       NOT NULL DEFAULT 1 COMMENT '值（计数）',
+      `expire_time` DATETIME     NOT NULL COMMENT '过期时间',
+      PRIMARY KEY (`k`),
+      KEY `idx_expire` (`expire_time`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='辅助键值表';
   ```
-  [xxxx] Ready to accept connections tcp 127.0.0.1:6379
-  ```
+- **可选：切换为 Redis**（数据量大、并发高，或觉得 MySQL 版响应偏慢时，可无痛切换）：
+  1. 启动一个 Redis：Windows 可用 Memurai，或下载 [github.com/tporadowski/redis/releases](https://github.com/tporadowski/redis/releases) 的 `Redis-x64-5.0.14.1.zip`，解压后双击 `redis-server.exe`；也可使用 WSL / 局域网现有 Redis（改 `application-dev.yml` 中 host/port）；
+  2. 在 `application-local.yml` 中加一行：`app.aux.store: redis`；
+  3. 重启后端即可。业务代码零改动，两套实现行为一致，随时可改回 MySQL。
 
 ---
 
 ## 六、启动后端
 
-方式一（推荐，命令行）：
+方式一（命令行，推荐）：
 ```bash
 cd backend-v2
 mvn spring-boot:run
 ```
-方式二（任意 IDE，如 IntelliJ IDEA）：直接运行 `backend-v2` 下的主启动类。
+方式二（任意 IDE，如 IntelliJ IDEA）：直接运行 `backend-v2` 下的主启动类 `BuddyApplication`。
 
-看到类似 `Tomcat started on port(s): 8080` 即成功，**这个窗口也先别关**。
+看到类似 `Tomcat started on port(s): 8080` 即成功。可选自检：`mvn test`，预期 **111 例全部通过**。
 
 ---
 
@@ -108,7 +118,6 @@ cd frontend-h5
 npm install     # 第一次较慢，可先配国内镜像: npm config set registry https://registry.npmmirror.com
 npm run dev
 ```
-看到 `Local: http://localhost:3000/` 后，用浏览器打开，按 F12 → 设备图标可模拟手机效果。
 
 **管理端**（`http://localhost:3001`）：
 ```bash
@@ -116,13 +125,10 @@ cd frontend-admin
 npm install
 npm run dev
 ```
-看到 `Local: http://localhost:3001/` 后，浏览器打开 `http://localhost:3001`。
 
 ---
 
 ## 八、访问与测试账号
-
-现在你开着：**Redis、后端、两个前端**一共 4 个窗口 + 浏览器。
 
 | 入口 | 地址 |
 |------|------|
@@ -135,8 +141,8 @@ npm run dev
 | 角色 | 账号 | 密码 |
 |------|------|------|
 | 管理员 | `admin001` | `123456` |
-| 学生 | `20240001` | `123456` |
-| 学生 | `20240002` | `123456` |
+| 学生 | `20240001` / `20240002` | `123456` |
+| 批量测试学生 | 如 `2342170101` | 学号 + "123"（如 `2342170101123`） |
 
 ---
 
@@ -144,18 +150,20 @@ npm run dev
 
 | 现象 | 原因与解决 |
 |------|-----------|
-| 后端报数据库连接被拒 | 第 3 步密码填错，或第 4 步没导入数据库 |
-| 登录报「系统繁忙」/「无法连接 Redis」 | Redis 没启动，双击 `redis-server.exe`（第 5 步） |
-| 后端启动失败 | JDK 不是 17，或 Maven 没配环境变量，重开后重试 |
+| 后端启动失败，提示"JWT 密钥未配置 / 长度不足" | 没配 `application-local.yml`，或密钥短于 32 位（第三步） |
+| 后端报数据库连接被拒 | 第三步密码填错，或第四步没导入数据库 |
+| 提示 `Table 'school_buddy.aux_kv' doesn't exist` | 旧库未升级：执行第五节的建表 SQL（或重新导入 `init-all.sql`） |
+| 登录报「系统繁忙」 | 默认模式多为数据库异常（检查 MySQL）；若已切换 Redis 模式，检查 Redis 是否启动 |
+| 后端启动失败（其他） | JDK 不是 17，或 Maven 未配置环境变量 |
 | `node` / `npm` 不是内部命令 | Node 没装好或没配 Path，装完重开终端 |
 | `npm install` 卡住不动 | 配国内镜像：`npm config set registry https://registry.npmmirror.com` 再重试 |
-| Navicat 运行 SQL 报 `Unknown database` | 说明没用 `init-all.sql`（该脚本内含建库）；确认选的是这个文件 |
-
-> 更多问题排查见 **`教学文档/00-新手小白从零启动教程.md`** 的 FAQ。
+| Navicat 运行 SQL 报 `Unknown database` | 确认选择的是 `init-all.sql`（该脚本内含建库语句） |
+| 提示"操作过于频繁，请稍后再试" | 触发了接口限流（发布 5 次/时、评论 20 次/时、报名与候补 10 次/时、举报 10 次/时），稍后再试 |
+| 收不到"活动即将开始"提醒 | 提醒只针对"未来 30 分钟内开始"的已过审组局，且每 5 分钟扫描一次；确认帖子开始时间与报名是否已通过 |
 
 ---
 
-## 📁 项目结构
+## 项目结构
 
 ```
 school-buddy-system/
@@ -163,21 +171,18 @@ school-buddy-system/
 ├─ backend-legacy/   # 老版后端归档（Java 8 + Boot 2.7，仅供追溯，勿启动）
 ├─ frontend-h5/      # H5 用户端（端口 3000）
 ├─ frontend-admin/   # 管理后台（端口 3001）
-├─ database/         # 建表脚本 + 测试数据（init-all.sql 一站式导入）
-├─ docs/             # 需求 / 设计 / 开发文档
-└─ AI-Dev-Workflow/  # 重构流程文档（需求/技术设计/开发计划基线）
-教学文档/             # 分步骤新手教程（含安装、排错）
+├─ database/         # 数据库脚本（init-all.sql 一站式导入，13 张表；more-users.sql 追加 50 个测试用户）
+├─ docs/             # 产品需求（PRD）/ 功能与技术详解 / 答辩问答准备 / 项目使用文档
+│                    # （另有两份历史设计文档，写论文可作参考）
+└─ 教学文档/          # 分步骤新手教程（历史资料；其中 Redis 相关内容以本文第五节为准）
 ```
 
-## 📄 文档索引
+## 文档索引
 
 | 文档 | 内容 |
 |------|------|
-| `docs/01-PRD需求分析文档.md` | 产品需求与业务规则 |
-| `docs/02-库表结构设计文档.md` | 数据库表结构 |
-| `docs/03-研发系统设计文档.md` | 系统设计 |
-| `docs/04-功能实现清单.md` | 功能实现情况 |
-| `docs/05-未实现功能清单.md` | 尚未实现的功能 |
-| `docs/17-项目不足与改进方向.md` | 不足与改进方向 |
-| `docs/18-毕设完善计划.md` | 毕设完善计划（分层） |
-| `教学文档/00-新手小白从零启动教程.md` | 从零搭建运行教程（详细版） |
+| `docs/产品需求文档（PRD）.md` | 为什么这样设计、解决什么问题、研究背景与意义、规则速览 |
+| `docs/功能与技术详解.md` | 技术栈、项目亮点、各模块实现细节与深水区讲解 |
+| `docs/答辩问答准备.md` | 高频问题与建议回答、口径统一表、演示脚本 |
+| `docs/项目使用文档.md` | 详细版使用指南（含 FAQ 与答辩演示建议） |
+| `docs/测试用户清单.md` | 全部测试账号清单（**管理员 admin001/123456** + 内置 45 个学生 + 追加 50 个学生，含密码与兴趣） |
