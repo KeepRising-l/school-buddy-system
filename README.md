@@ -73,6 +73,19 @@
 > ⚠️ 该脚本会**清空重建**所有表，重复运行会覆盖已有数据；仅限本地/测试库使用。
 >
 > 需要更多演示用户时：再执行一次 `database/more-users.sql`（追加 50 个学生账号，含兴趣标签；账号/密码明细见 `docs/测试用户清单.md`，重复执行安全）。
+>
+> ⚠️ **用命令行导入时必须带字符集参数**，否则中文会变成乱码（`陈嘉豪` → `闄堝槈璞`）：
+> ```bash
+> mysql -u root -p --default-character-set=utf8mb4 < database/init-all.sql
+> mysql -u root -p --default-character-set=utf8mb4 school_buddy < database/more-users.sql
+> ```
+> 用 Navicat 导入则无需关心（它默认按 UTF-8 处理）。
+>
+> 📅 **演示前建议**：仓库自带的示例帖子时间都是固定的过去日期，导入后会被定时任务推进成"已结束"，广场看起来是空的。
+> 答辩/演示前跑一次 `database/demo-posts.sql`，会生成 8 条**相对当前时间**的未来组局帖（含一条 25 分钟后开始的，用来观察"活动提醒"通知）：
+> ```bash
+> mysql -u root -p --default-character-set=utf8mb4 school_buddy < database/demo-posts.sql
+> ```
 
 ---
 
