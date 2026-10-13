@@ -19,8 +19,9 @@
           <el-button type="primary" :loading="loading" style="width: 100%" @click="handleLogin">登 录</el-button>
         </el-form-item>
       </el-form>
-      <div class="login-tip">
-        默认管理员账号：admin001 / 123456
+      <!-- 演示账号提示仅本地开发构建显示，生产构建不包含 -->
+      <div v-if="isDev" class="login-tip">
+        开发环境演示账号：admin001 / 123456（仅本地测试使用）
       </div>
     </div>
   </div>
@@ -37,6 +38,8 @@ const router = useRouter()
 const adminStore = useAdminStore()
 const formRef = ref()
 const loading = ref(false)
+// 是否开发环境（生产构建不显示演示账号提示）
+const isDev = import.meta.env.DEV
 
 const form = reactive({
   account: '',

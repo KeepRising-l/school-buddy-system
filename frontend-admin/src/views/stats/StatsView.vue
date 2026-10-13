@@ -124,6 +124,69 @@
           </el-col>
         </el-row>
       </el-tab-pane>
+
+      <!-- Tab 3: 举报处理（缺口#4） -->
+      <el-tab-pane label="举报处理" name="report">
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-card shadow="hover" class="metric-card">
+              <div class="metric-label">举报总数</div>
+              <div class="metric-value">{{ reportStats.totalReports ?? '—' }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" class="metric-card">
+              <div class="metric-label">已处理</div>
+              <div class="metric-value">{{ reportStats.handledReports ?? '—' }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" class="metric-card">
+              <div class="metric-label">有效举报</div>
+              <div class="metric-value warn">{{ reportStats.validReports ?? '—' }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" class="metric-card">
+              <div class="metric-label">待处理</div>
+              <div class="metric-value danger">{{ reportStats.pendingReports ?? '—' }}</div>
+            </el-card>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20" style="margin-top: 20px">
+          <el-col :span="8">
+            <el-card shadow="hover" class="metric-card">
+              <div class="metric-label">处理率</div>
+              <div class="metric-value">{{ reportStats.handledRate != null ? reportStats.handledRate + '%' : '—' }}</div>
+              <div class="metric-hint">已处理 / 举报总数</div>
+            </el-card>
+          </el-col>
+          <el-col :span="16">
+            <el-card shadow="hover" class="metric-card">
+              <div class="metric-label">平均处理时长</div>
+              <div class="metric-value">
+                <template v-if="reportStats.avgHandleHours != null">
+                  {{ reportStats.avgHandleHours }} <span class="unit">小时</span>
+                </template>
+                <template v-else>—</template>
+              </div>
+              <div class="metric-hint">从提交到管理员处置的平均耗时，衡量举报有没有人管</div>
+            </el-card>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20" style="margin-top: 20px">
+          <el-col :span="24">
+            <el-card shadow="hover" class="chart-card">
+              <template #header>
+                <span>每日举报量（近30天）</span>
+              </template>
+              <div ref="reportTrendRef" class="chart-box" />
+            </el-card>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -133,7 +196,7 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import {
   getPostTrend, getSuccessTrend, getCategoryTop5, getCreditDistribution,
-  getUserGrowthTrend, getActiveTrend, getRetention, getFunnel, exportStats
+  getUserGrowthTrend, getActiveTrend, getRetention, getFunnel, exportStats, getReportStats
 } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import { downloadFromBlob } from '@/utils/download'
@@ -153,6 +216,11 @@ const activeTrendRef = ref()
 const retentionRef = ref()
 const funnelRef = ref()
 const retentionTableData = ref([])
+
+// ===== 举报处理（缺口#4）=====
+const reportTrendRef = ref()
+const reportStats = ref({})
+let reportTrendChart = null
 
 // ===== 图表实例 =====
 let postTrendChart = null
@@ -482,12 +550,37 @@ const handleExportStats = async (type) => {
   }
 }
 
+// ===== 举报处理统计（缺口#4）=====
+const loadReportStats = async () => {
+  try {
+    const res = await getReportStats({ days: 30 })
+    const data = res.data || {}
+    reportStats.value = data
+
+    const trend = data.trend || []
+    reportTrendChart = echarts.init(reportTrendRef.value)
+    reportTrendChart.setOption({
+      ...createLineOption('举报量', trend),
+      series: [{
+        ...createLineOption('举报量', trend).series[0],
+        name: '举报量',
+        itemStyle: { color: '#ef4444' },
+        areaStyle: { opacity: 0.15 }
+      }]
+    })
+  } catch (e) {}
+}
+
 // ===== Tab 切换懒加载 =====
 watch(activeTab, (val) => {
   if (val === 'retention') {
     nextTick(() => {
       loadRetention()
       loadFunnel()
+    })
+  } else if (val === 'report') {
+    nextTick(() => {
+      loadReportStats()
     })
   }
 })
@@ -502,6 +595,7 @@ const handleResize = () => {
   activeTrendChart && activeTrendChart.resize()
   retentionChart && retentionChart.resize()
   funnelChart && funnelChart.resize()
+  reportTrendChart && reportTrendChart.resize()
 }
 
 onMounted(() => {
@@ -524,6 +618,7 @@ onBeforeUnmount(() => {
   activeTrendChart && activeTrendChart.dispose()
   retentionChart && retentionChart.dispose()
   funnelChart && funnelChart.dispose()
+  reportTrendChart && reportTrendChart.dispose()
   window.removeEventListener('resize', handleResize)
 })
 </script>
@@ -533,6 +628,37 @@ onBeforeUnmount(() => {
   .chart-card {
     .chart-box {
       height: 350px;
+    }
+  }
+
+  // 指标卡（举报处理统计）
+  .metric-card {
+    .metric-label {
+      font-size: 13px;
+      color: #909399;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #303133;
+      line-height: 1.2;
+
+      .unit {
+        font-size: 14px;
+        font-weight: 400;
+        color: #909399;
+      }
+
+      &.warn { color: #e6a23c; }
+      &.danger { color: #f56c6c; }
+    }
+
+    .metric-hint {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #c0c4cc;
     }
   }
 }

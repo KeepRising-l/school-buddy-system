@@ -86,11 +86,11 @@ const rankPickerIndex = ref(0)
 
 // 段位选项
 const rankColumns = [
-  { text: '青铜', value: 1 },
-  { text: '白银', value: 2 },
-  { text: '黄金', value: 3 },
-  { text: '钻石', value: 4 },
-  { text: '王者', value: 5 }
+  { text: '萌新', value: 1 },
+  { text: '小白', value: 2 },
+  { text: '熟手', value: 3 },
+  { text: '高手', value: 4 },
+  { text: '宗师', value: 5 }
 ]
 
 // 该标签是否有段位体系（后端按分类返回：球类/电竞有，桌游/跑步等没有）
@@ -120,7 +120,7 @@ const isSelected = (tagId) => {
 const getSelectedRank = (tagId) => {
   const level = selectedTags.value[tagId]?.level
   if (!level) return ''
-  const map = { 1: '青铜', 2: '白银', 3: '黄金', 4: '钻石', 5: '王者' }
+  const map = { 1: '萌新', 2: '小白', 3: '熟手', 4: '高手', 5: '宗师' }
   return map[level] || ''
 }
 
@@ -145,7 +145,7 @@ const onTagClick = (tag) => {
   }
   // 未选中的有段位标签：弹出段位选择
   currentTag.value = tag
-  rankPickerIndex.value = 2 // 默认定位黄金
+  rankPickerIndex.value = 2 // 默认定位熟手
   showRankPicker.value = true
 }
 

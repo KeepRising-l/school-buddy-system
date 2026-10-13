@@ -74,6 +74,31 @@
         </div>
       </div>
 
+      <!-- 联系方式（缺口#5）：仅发布者与"已通过报名"的参与者可见，方便成行后互相联系 -->
+      <div class="contact-card card" v-if="post.contactVisible && post.publisherContact">
+        <h3 class="section-title">联系方式</h3>
+        <div class="contact-row">
+          <span class="contact-label">发布者 · {{ post.publisherNickname || '匿名' }}</span>
+          <a class="contact-value" :href="`tel:${post.publisherContact}`" @click.stop>
+            <van-icon name="phone-o" /> {{ post.publisherContact }}
+          </a>
+        </div>
+        <div class="contact-row" v-for="u in contactMembers" :key="u.userId">
+          <span class="contact-label">参与者 · {{ u.nickname }}</span>
+          <a class="contact-value" :href="`tel:${u.contact}`" @click.stop>
+            <van-icon name="phone-o" /> {{ u.contact }}
+          </a>
+        </div>
+        <p class="contact-tip">联系方式仅本组局成员可见，请勿外传</p>
+      </div>
+      <!-- 未解锁提示：报名通过后才可见 -->
+      <div class="contact-card card" v-else-if="contactLocked">
+        <h3 class="section-title">联系方式</h3>
+        <p class="contact-locked">
+          <van-icon name="lock" /> 报名通过后可查看发布者联系方式，方便成行后联系
+        </p>
+      </div>
+
       <!-- 已报名用户列表 -->
       <div class="joined-card card" v-if="post.applyUsers && post.applyUsers.length">
         <h3 class="section-title">已报名 ({{ post.currentPeople }})</h3>
@@ -322,6 +347,11 @@ const userStore = useUserStore()
 // 帖子ID（可变：详情页之间跳转时组件复用，需跟随路由参数更新）
 let postId = route.params.id
 const post = ref(null)
+// 请求序号：路由快速切换时丢弃过期响应，避免旧请求覆盖新状态
+let detailSeq = 0
+let commentSeq = 0
+let favSeq = 0
+let applyListSeq = 0
 const commentList = ref([])
 const commentText = ref('')
 const applyLoading = ref(false)
@@ -355,7 +385,7 @@ const statusType = computed(() => statusMap[post.value?.status]?.type || 'defaul
 
 // 段位要求文本
 const requireLevelText = computed(() => {
-  const map = { 1: '青铜以上', 2: '白银以上', 3: '黄金以上', 4: '钻石以上', 5: '王者' }
+  const map = { 1: '萌新以上', 2: '小白以上', 3: '熟手以上', 4: '高手以上', 5: '宗师' }
   return map[post.value?.requireLevel] || '不限'
 })
 
@@ -367,7 +397,7 @@ const requireGenderText = computed(() => {
 
 // 段位文本
 const levelText = (level) => {
-  const map = { 1: '青铜', 2: '白银', 3: '黄金', 4: '钻石', 5: '王者' }
+  const map = { 1: '萌新', 2: '小白', 3: '熟手', 4: '高手', 5: '宗师' }
   return map[level] || ''
 }
 
@@ -384,6 +414,20 @@ const canMarkAttendance = computed(() => {
 // 当前用户的报名状态
 const applyStatus = computed(() => {
   return post.value?.applyStatus || ''
+})
+
+// 已通过报名者的联系方式列表（缺口#5：发布者与其他已成行成员可见，自己不再重复展示）
+const contactMembers = computed(() => {
+  const list = post.value?.applyUsers || []
+  return list.filter(u => u.contact && u.userId !== userStore.userInfo?.id)
+})
+
+// 联系方式处于"未解锁"状态：登录用户尚未报名通过，但组局仍可能成行时给出提示
+const contactLocked = computed(() => {
+  const p = post.value
+  if (!p || isOwner.value || p.contactVisible) return false
+  if (!userStore.isLoggedIn) return false
+  return ['RECRUITING', 'FULL', 'ONGOING', 'FINISHED'].includes(p.status)
 })
 
 // 我的兴趣标签（含段位），用于报名资格预检
@@ -495,11 +539,14 @@ const formatTime = (time) => {
 
 // 加载帖子详情
 const fetchDetail = async () => {
+  const seq = ++detailSeq
   loadError.value = false
   try {
     const res = await getPostDetail(postId)
+    if (seq !== detailSeq) return // 已有更新的请求，丢弃过期响应
     post.value = res.data
   } catch (err) {
+    if (seq !== detailSeq) return
     // 修复：失败显示错误态+重试按钮，而不是永远"加载中"
     loadError.value = true
   }
@@ -515,8 +562,10 @@ const reload = () => {
 // 加载收藏状态（V1.1）
 const fetchFavoriteStatus = async () => {
   if (!userStore.isLoggedIn) return
+  const seq = ++favSeq
   try {
     const res = await getFavoriteStatus(postId)
+    if (seq !== favSeq) return // 过期响应丢弃
     favorited.value = res.data?.favorited || false
     favoriteCount.value = res.data?.count || 0
   } catch (err) {
@@ -549,8 +598,10 @@ const handleToggleFavorite = async () => {
 
 // 加载评论列表
 const fetchComments = async () => {
+  const seq = ++commentSeq
   try {
     const res = await getComments(postId, { page: 1, size: 100 })
+    if (seq !== commentSeq) return // 过期响应丢弃
     commentList.value = res.data?.records || res.data || []
   } catch (err) {
     // 接口层已处理
@@ -671,9 +722,11 @@ const handleAddComment = async () => {
 
 // 打开报名管理弹窗
 const openApplySheet = async () => {
+  const seq = ++applyListSeq
   showApplySheet.value = true
   try {
     const res = await getApplyList(postId)
+    if (seq !== applyListSeq) return // 过期响应丢弃
     applyList.value = res.data || []
   } catch (err) {
     // 接口层已处理
@@ -926,6 +979,54 @@ onMounted(loadAll)
         white-space: nowrap;
       }
     }
+  }
+}
+
+// 联系方式卡片（缺口#5）
+.contact-card {
+  .contact-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border-light);
+
+    &:last-of-type { border-bottom: none; }
+
+    .contact-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      margin-right: 10px;
+    }
+
+    .contact-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+      letter-spacing: 0.02em;
+    }
+  }
+
+  .contact-tip {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-hint);
+  }
+
+  .contact-locked {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-hint);
+    line-height: 1.6;
+
+    .van-icon { color: var(--text-disabled); flex-shrink: 0; }
   }
 }
 

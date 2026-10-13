@@ -63,7 +63,7 @@
           :total="pagination.total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
+          @size-change="handleSizeChange"
           @current-change="loadData"
         />
       </div>
@@ -278,6 +278,12 @@ const loadData = async () => {
 
 // 搜索
 const handleSearch = () => {
+  pagination.page = 1
+  loadData()
+}
+
+// 每页条数变化：回到第一页再加载（避免停留在越界页码）
+const handleSizeChange = () => {
   pagination.page = 1
   loadData()
 }

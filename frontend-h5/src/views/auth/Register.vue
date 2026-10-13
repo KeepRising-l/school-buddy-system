@@ -56,7 +56,7 @@
       <van-field
         v-model="form.password"
         type="password"
-        placeholder="请输入密码（8-20位，含字母和数字）"
+        placeholder="密码8-20位，含字母和数字（可用 @$!%*#?&）"
         left-icon="lock"
         show-password
         maxlength="20"
@@ -146,12 +146,9 @@ const validate = () => {
     showToast('请输入密码')
     return false
   }
-  if (form.password.length < 8 || form.password.length > 20) {
-    showToast('密码长度为8-20位')
-    return false
-  }
-  if (!/[a-zA-Z]/.test(form.password) || !/\d/.test(form.password)) {
-    showToast('密码需包含字母和数字')
+  // 与后端 RegisterRequest 校验规则保持一致（8-20位，字母+数字，可用符号 @$!%*#?&）
+  if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,20}$/.test(form.password)) {
+    showToast('密码需8-20位，包含字母和数字（可用符号 @$!%*#?&）')
     return false
   }
   if (form.password !== form.confirmPassword) {

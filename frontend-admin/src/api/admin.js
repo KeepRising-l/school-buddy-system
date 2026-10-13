@@ -36,6 +36,8 @@ export const getCreditDistribution = () => request.get('/api/admin/stats/credit'
 export const getUserGrowthTrend = (params) => request.get('/api/admin/stats/user-growth', { params })
 export const getRetention = (params) => request.get('/api/admin/stats/retention', { params })
 export const getFunnel = (params) => request.get('/api/admin/stats/funnel', { params })
+// 举报处理统计（缺口#4）：总量/已处理/有效/待处理 + 处理率 + 平均处理时长 + 趋势
+export const getReportStats = (params) => request.get('/api/admin/stats/reports', { params })
 
 // ===== 举报处理（V1.1）=====
 export const getReportList = (params) => request.get('/api/admin/report/list', { params })

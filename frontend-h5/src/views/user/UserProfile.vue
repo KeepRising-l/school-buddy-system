@@ -169,7 +169,7 @@ const statusText = (s) => statusMap[s]?.text || s
 const statusType = (s) => statusMap[s]?.type || 'default'
 
 const levelText = (level) => {
-  const map = { 1: '青铜', 2: '白银', 3: '黄金', 4: '钻石', 5: '王者' }
+  const map = { 1: '萌新', 2: '小白', 3: '熟手', 4: '高手', 5: '宗师' }
   return map[level] || ''
 }
 

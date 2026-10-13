@@ -229,7 +229,7 @@ const categoryText = computed(() => form.category || '')
 const tagNamesText = computed(() => selectedTagName.value || '')
 const rankText = computed(() => {
   if (!selectedTagHasLevel.value) return '不适用'
-  const map = { 1: '青铜以上', 2: '白银以上', 3: '黄金以上', 4: '钻石以上', 5: '王者' }
+  const map = { 1: '萌新以上', 2: '小白以上', 3: '熟手以上', 4: '高手以上', 5: '宗师' }
   return map[form.requireLevel] || '不限'
 })
 const startTimeText = computed(() => form.startTime ? formatDisplayTime(form.startTime) : '')
@@ -252,11 +252,11 @@ const tagColumns = computed(() => {
 // 段位选项
 const rankColumns = [
   { text: '不限', value: null },
-  { text: '青铜以上', value: 1 },
-  { text: '白银以上', value: 2 },
-  { text: '黄金以上', value: 3 },
-  { text: '钻石以上', value: 4 },
-  { text: '王者', value: 5 }
+  { text: '萌新以上', value: 1 },
+  { text: '小白以上', value: 2 },
+  { text: '熟手以上', value: 3 },
+  { text: '高手以上', value: 4 },
+  { text: '宗师', value: 5 }
 ]
 
 // 时间选择器：默认值取「当前时间+2小时」，保证发布时校验必过

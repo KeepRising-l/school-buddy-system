@@ -8,6 +8,11 @@
     </van-nav-bar>
 
     <div class="content">
+      <!-- 类型筛选（缺口#4：通知多了以后按类型找） -->
+      <van-tabs v-model:active="activeTab" sticky class="type-tabs" @change="onTabChange">
+        <van-tab v-for="t in typeOptions" :key="t.key" :title="t.title" />
+      </van-tabs>
+
       <!-- 通知列表 -->
       <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
         <van-list
@@ -60,6 +65,26 @@ const refreshing = ref(false)
 
 const hasUnread = computed(() => notificationList.value.some(n => n.isRead === 0))
 
+// 类型筛选（缺口#4）：一个分类可对应多个通知类型，后端支持逗号分隔多类型
+const typeOptions = [
+  { key: 'all', title: '全部', types: '' },
+  { key: 'apply', title: '报名', types: 'APPLY_NEW,APPLY_RESULT,WAITLIST_PROMOTED' },
+  { key: 'remind', title: '活动提醒', types: 'ACTIVITY_REMIND' },
+  { key: 'post', title: '组局变动', types: 'POST_TAKEDOWN,POST_CANCEL' },
+  { key: 'system', title: '系统', types: 'SYSTEM' }
+]
+const activeTab = ref(0)
+const currentTypes = computed(() => typeOptions[activeTab.value]?.types || '')
+
+// 切换分类：清空列表并从头加载（loading 置 true 防止 van-list 重复触发 @load）
+const onTabChange = () => {
+  notificationList.value = []
+  page.value = 1
+  finished.value = false
+  loading.value = true
+  loadMore()
+}
+
 // 通知图标映射
 const iconMap = {
   APPLY_NEW: { icon: 'friends-o', cls: 'icon-green' },
@@ -77,7 +102,7 @@ const iconClass = (type) => iconMap[type]?.cls || 'icon-grey'
 
 const loadMore = async () => {
   try {
-    const res = await getNotifications({ page: page.value, size })
+    const res = await getNotifications({ page: page.value, size, type: currentTypes.value || undefined })
     const list = res.data?.records || []
     notificationList.value = page.value === 1 ? list : [...notificationList.value, ...list]
     finished.value = (res.data?.records?.length || 0) < size
@@ -94,7 +119,7 @@ const onRefresh = async () => {
   const savedPage = page.value
   page.value = 1
   try {
-    const res = await getNotifications({ page: 1, size })
+    const res = await getNotifications({ page: 1, size, type: currentTypes.value || undefined })
     notificationList.value = res.data?.records || []
     finished.value = (res.data?.records?.length || 0) < size
     page.value = 2
@@ -144,6 +169,8 @@ const formatTime = (time) => {
 }
 
 onMounted(() => {
+  // 与类型筛选一致：先置 loading 再手动加载，避免 van-list 同时触发一次 @load
+  loading.value = true
   loadMore()
 })
 </script>
@@ -157,6 +184,20 @@ onMounted(() => {
 
   .content {
     padding: 12px 16px;
+  }
+
+  // 类型筛选栏（缺口#4）
+  .type-tabs {
+    margin: -12px -16px 12px;
+    background: var(--bg-card);
+
+    :deep(.van-tabs__nav) {
+      background: var(--bg-card);
+    }
+
+    :deep(.van-tab) {
+      font-size: 13px;
+    }
   }
 
   .notification-item {

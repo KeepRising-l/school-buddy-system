@@ -1,16 +1,18 @@
 import axios from 'axios'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import router from '@/router'
+import { useUserStore } from '@/store/user'
 
 const request = axios.create({
   baseURL: '',
   timeout: 15000
 })
 
-// 全局 loading 计数（V1.2 修复）：
-// 并发请求时只显示一个 loading，全部完成后才关闭，避免一个请求返回就提前关掉另一个的 loading。
-// 不使用 forbidClick：分页加载/静默刷新时不应全屏锁住用户操作。
+// 全局 loading 计数：只对非静默请求计数，保证 show/close 一一配对。
+// 静默请求（如报名弹窗、标签预取）不参与计数，避免提前关闭其他请求的 loading。
 let loadingCount = 0
+const isSilent = (config) => !!(config && config.silent)
+
 const showGlobalLoading = () => {
   loadingCount += 1
   if (loadingCount === 1) {
@@ -24,6 +26,23 @@ const closeGlobalLoading = () => {
   }
 }
 
+// 清空登录态并安全返回登录页：
+// 1) 通过 store.logout() 同步清掉内存状态（否则页面仍显示已登录）
+// 2) 带上回跳地址（会被登录页做站内路径校验）
+// 3) 已在登录页时不重复跳转，避免重复导航
+const handleUnauthorized = () => {
+  try {
+    useUserStore().logout()
+  } catch (e) {
+    localStorage.removeItem('h5_token')
+    localStorage.removeItem('h5_user')
+  }
+  const current = router.currentRoute.value
+  if (current.path !== '/login') {
+    router.replace({ path: '/login', query: { redirect: current.fullPath } })
+  }
+}
+
 // 请求拦截器
 request.interceptors.request.use(
   config => {
@@ -31,8 +50,7 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    // 非静默请求显示 loading
-    if (!config.silent) {
+    if (!isSilent(config)) {
       showGlobalLoading()
     }
     return config
@@ -43,7 +61,10 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   response => {
-    closeGlobalLoading()
+    // 与请求拦截器配对：仅非静默请求参与计数
+    if (!isSilent(response.config)) {
+      closeGlobalLoading()
+    }
     const res = response.data
     if (!res) {
       showToast('服务器响应异常')
@@ -52,16 +73,14 @@ request.interceptors.response.use(
     if (res.code === 200) {
       return res
     }
-    // 401 先清理状态并跳转，避免跳转前还弹一次错误提示
+    // 401 先清理状态并安全跳转，避免跳转前还弹一次错误提示
     if (res.code === 401) {
-      localStorage.removeItem('h5_token')
-      localStorage.removeItem('h5_user')
-      router.push('/login')
+      handleUnauthorized()
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
     // 业务错误：完整展示后端消息（支持长文本换行，显示3.5秒）
     // silent 请求由调用方自己处理错误提示（如报名弹窗），这里不再重复弹 toast
-    if (!response.config.silent) {
+    if (!isSilent(response.config)) {
       showToast({
         message: res.message || '操作失败',
         duration: 3500,
@@ -71,16 +90,17 @@ request.interceptors.response.use(
     return Promise.reject(new Error(res.message || '操作失败'))
   },
   error => {
-    closeGlobalLoading()
+    // 与请求拦截器配对：仅非静默请求参与计数（config 缺失说明请求未发出，未计数）
+    if (error.config && !isSilent(error.config)) {
+      closeGlobalLoading()
+    }
     // HTTP 层面的 401（网关/过滤器返回）同样清理并跳转
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('h5_token')
-      localStorage.removeItem('h5_user')
-      router.push('/login')
+      handleUnauthorized()
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
     // silent 请求由调用方自己处理错误提示，避免双重提示
-    if (!error.config?.silent) {
+    if (!isSilent(error.config)) {
       showToast({
         message: error.response?.data?.message || '网络错误，请稍后重试',
         duration: 3500,

@@ -67,9 +67,9 @@ const statusMap = {
 const statusText = computed(() => statusMap[props.post.status]?.text || '未知')
 const statusType = computed(() => statusMap[props.post.status]?.type || 'default')
 
-// 段位要求徽章文本（1-4 为"XX以上"，5 王者为最高档）
+// 段位要求徽章文本（1-4 为"XX以上"，5 宗师为最高档）
 const requireLevelText = computed(() => {
-  const map = { 1: '要求青铜以上', 2: '要求白银以上', 3: '要求黄金以上', 4: '要求钻石以上', 5: '要求王者' }
+  const map = { 1: '要求萌新以上', 2: '要求小白以上', 3: '要求熟手以上', 4: '要求高手以上', 5: '要求宗师' }
   return map[props.post.requireLevel] || ''
 })
 
