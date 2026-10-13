@@ -61,21 +61,26 @@
         class="form-field"
       />
       <van-popup v-model:show="showStartPicker" round position="bottom">
-        <van-date-picker
-          v-model="startDatePicker"
-          title="选择开始日期"
-          :min-date="minDate"
-          @confirm="onStartDateConfirm"
-          @cancel="showStartPicker = false"
-        />
+        <!-- 桌面端鼠标滚轮也能改值：Vant Picker 只监听 touch 事件，PC 上滚轮/拖拽都无效，只能用滚轮补 -->
+        <div class="picker-wheel" @wheel.prevent="(e) => onPickerWheel(e, 'startDate')">
+          <van-date-picker
+            v-model="startDatePicker"
+            title="选择开始日期"
+            :min-date="minDate"
+            @confirm="onStartDateConfirm"
+            @cancel="showStartPicker = false"
+          />
+        </div>
       </van-popup>
       <van-popup v-model:show="showStartTimePicker" round position="bottom">
-        <van-time-picker
-          v-model="startTimePicker"
-          title="选择开始时间"
-          @confirm="onStartTimeConfirm"
-          @cancel="showStartTimePicker = false"
-        />
+        <div class="picker-wheel" @wheel.prevent="(e) => onPickerWheel(e, 'startTime')">
+          <van-time-picker
+            v-model="startTimePicker"
+            title="选择开始时间"
+            @confirm="onStartTimeConfirm"
+            @cancel="showStartTimePicker = false"
+          />
+        </div>
       </van-popup>
 
       <!-- 结束时间 -->
@@ -89,21 +94,25 @@
         class="form-field"
       />
       <van-popup v-model:show="showEndPicker" round position="bottom">
-        <van-date-picker
-          v-model="endDatePicker"
-          title="选择结束日期"
-          :min-date="minDate"
-          @confirm="onEndDateConfirm"
-          @cancel="showEndPicker = false"
-        />
+        <div class="picker-wheel" @wheel.prevent="(e) => onPickerWheel(e, 'endDate')">
+          <van-date-picker
+            v-model="endDatePicker"
+            title="选择结束日期"
+            :min-date="minDate"
+            @confirm="onEndDateConfirm"
+            @cancel="showEndPicker = false"
+          />
+        </div>
       </van-popup>
       <van-popup v-model:show="showEndTimePicker" round position="bottom">
-        <van-time-picker
-          v-model="endTimePicker"
-          title="选择结束时间"
-          @confirm="onEndTimeConfirm"
-          @cancel="showEndTimePicker = false"
-        />
+        <div class="picker-wheel" @wheel.prevent="(e) => onPickerWheel(e, 'endTime')">
+          <van-time-picker
+            v-model="endTimePicker"
+            title="选择结束时间"
+            @confirm="onEndTimeConfirm"
+            @cancel="showEndTimePicker = false"
+          />
+        </div>
       </van-popup>
 
       <!-- 地点 -->
@@ -184,12 +193,24 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showToast, showDialog } from 'vant'
 import { createPost } from '@/api/post'
 import { getAllTags } from '@/api/tag'
 
 const router = useRouter()
 const loading = ref(false)
+
+// 发布失败一律用弹窗说明原因：
+// toast 只停 3.5 秒且不阻断操作，规则类提示（如"开始时间晚于结束时间"）文案长，用户经常读不完就没了，
+// 事后也没有任何痕迹，表现为"点了发布，什么也没发生"。
+// 必填项缺失属于"还没填完"，仍在页面上，用 toast 即时提醒即可，不打扰。
+const fail = (message, title = '发布失败') => {
+  showDialog({
+    title,
+    message,
+    confirmButtonText: '知道了'
+  }).catch(() => {})
+}
 
 // 表单数据
 const form = reactive({
@@ -269,6 +290,76 @@ const startDatePicker = ref([String(defaultStart.getFullYear()), String(defaultS
 const endDatePicker = ref([String(defaultEnd.getFullYear()), String(defaultEnd.getMonth() + 1).padStart(2, '0'), String(defaultEnd.getDate()).padStart(2, '0')])
 const startTimePicker = ref([String(defaultStart.getHours()).padStart(2, '0'), String(defaultStart.getMinutes()).padStart(2, '0')])
 const endTimePicker = ref([String(defaultEnd.getHours()).padStart(2, '0'), String(defaultEnd.getMinutes()).padStart(2, '0')])
+
+// ===== 桌面端鼠标滚轮改值 =====
+// Vant 4 的 PickerColumn 只绑定 touchstart/touchmove/touchend（见 vant/es/picker/PickerColumn.mjs），
+// 桌面端鼠标拖拽和滚轮都没有响应，只能一个个点选项——选时间要点很多次，很麻烦。
+// 这里在弹层上补一层 wheel：把滚动量累加，超过阈值就上/下移动一格，直接改 v-model 驱动选中值。
+const pickerModels = {
+  startDate: startDatePicker,
+  endDate: endDatePicker,
+  startTime: startTimePicker,
+  endTime: endTimePicker
+}
+
+const WHEEL_STEP_THRESHOLD = 40 // 鼠标一格约 100；触控板单次很小，靠累加达到阈值，避免惯性连跳
+let wheelAccum = 0
+let wheelStamp = 0
+
+const to2 = (n) => String(n).padStart(2, '0')
+
+// 定位滚轮落在第几列（年/月/日 或 时/分）
+const resolveColumnIndex = (event) => {
+  const column = event.target.closest?.('.van-picker-column')
+  const root = event.target.closest?.('.van-picker')
+  if (!column || !root) return -1
+  return Array.prototype.indexOf.call(root.querySelectorAll('.van-picker-column'), column)
+}
+
+// 日期列位移：用 Date 做进位，并把"日"夹取到目标月份的天数内（否则 1/31 +1 月会跳到 3/3）
+const shiftDateValue = (values, columnIndex, direction) => {
+  const [year, month, day] = values.map(Number)
+  let targetYear = year
+  let targetMonth = month - 1
+  let targetDay = day
+  if (columnIndex === 0) targetYear = year + direction
+  else if (columnIndex === 1) targetMonth = month - 1 + direction
+  else targetDay = day + direction
+
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate()
+  const shifted = new Date(targetYear, targetMonth, Math.min(targetDay, daysInTargetMonth))
+  // 不允许滚到 min-date 之前（与选择器契约保持一致）
+  const floor = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate())
+  if (shifted < floor) return values
+  return [String(shifted.getFullYear()), to2(shifted.getMonth() + 1), to2(shifted.getDate())]
+}
+
+// 时间列位移：时/分按 24/60 循环
+const shiftTimeValue = (values, columnIndex, direction) => {
+  const [hour, minute] = values.map(Number)
+  if (columnIndex === 0) return [to2((hour + direction + 24) % 24), to2(minute)]
+  return [to2(hour), to2((minute + direction + 60) % 60)]
+}
+
+const onPickerWheel = (event, key) => {
+  const columnIndex = resolveColumnIndex(event)
+  if (columnIndex < 0) return
+
+  const now = Date.now()
+  if (now - wheelStamp > 200) wheelAccum = 0 // 停顿后重新累计，避免上次余量影响
+  wheelStamp = now
+  wheelAccum += event.deltaY
+
+  if (Math.abs(wheelAccum) < WHEEL_STEP_THRESHOLD) return
+  const direction = wheelAccum > 0 ? 1 : -1 // 向下滚 = 下一项
+  wheelAccum = 0
+
+  const target = pickerModels[key]
+  if (!target) return
+  target.value = key.endsWith('Date')
+    ? shiftDateValue(target.value, columnIndex, direction)
+    : shiftTimeValue(target.value, columnIndex, direction)
+}
 
 // 分类确认
 const onCategoryConfirm = ({ selectedOptions }) => {
@@ -385,26 +476,26 @@ const validate = () => {
     return false
   }
   // 时间校验（PRD：开始时间须晚于当前1小时，结束须晚于开始）
-  // 提示语说明具体原因，避免用户不知道错在哪
+  // 规则类错误用弹窗把「你填了什么、哪里不合法」讲清楚，不用 toast，避免用户没看到就来问"为什么发不出去"
   const now = new Date()
   const start = new Date(form.startTime.replace(/-/g, '/'))
   const end = new Date(form.endTime.replace(/-/g, '/'))
 
   if (start <= now) {
-    showToast('开始时间已过去，请选择未来的时间（当前时间 ' + formatNow(now) + '）')
+    fail(`开始时间已过去，请选择未来的时间。\n当前时间：${formatDateTime(now)}\n你选择的：${formatDateTime(start)}`, '时间不符合要求')
     return false
   }
   if (start <= now.getTime() + 60 * 60 * 1000) {
-    showToast('开始时间距现在不足1小时，请选晚一点的时间')
+    fail(`开始时间距现在不足 1 小时，请选晚一点的时间。\n当前时间：${formatDateTime(now)}\n你选择的：${formatDateTime(start)}`, '时间不符合要求')
     return false
   }
   if (end <= start) {
     // 用户明确要求：开始晚于结束时要提示选错了 + 为什么
-    showToast('时间选错了：开始时间（' + formatDateTime(start) + '）晚于结束时间（' + formatDateTime(end) + '），请重新选择')
+    fail(`时间选错了：开始时间晚于结束时间，请重新选择。\n开始时间：${formatDateTime(start)}\n结束时间：${formatDateTime(end)}`, '时间不符合要求')
     return false
   }
   if (end - start > 24 * 60 * 60 * 1000) {
-    showToast('活动时长不能超过24小时，请调整开始/结束时间')
+    fail(`活动时长不能超过 24 小时。\n你选择的：${formatDateTime(start)} ~ ${formatDateTime(end)}（共 ${((end - start) / 3600000).toFixed(1)} 小时）`, '时间不符合要求')
     return false
   }
   if (!form.location) {
@@ -448,7 +539,9 @@ const handleSubmit = async () => {
     showToast('发布成功')
     router.replace('/square')
   } catch (err) {
-    // 接口层已处理
+    // 后端拒绝（违禁词/时长超 24h/进行中帖子超上限/限流/信誉分不足…）的原因要留下痕迹，
+    // 不能只弹 3.5 秒 toast：用户回头看时已经什么都没有了
+    fail(err?.message || '发布失败，请稍后重试')
   } finally {
     loading.value = false
   }
