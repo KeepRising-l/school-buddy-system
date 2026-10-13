@@ -2,6 +2,7 @@ package com.buddy.module.post.service.impl;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.module.apply.entity.PostApply;
 import com.buddy.module.apply.mapper.PostApplyMapper;
@@ -75,6 +76,7 @@ class AdminPostServiceImplTest {
         ReflectionTestUtils.setField(adminPostService, "favoriteMapper", favoriteMapper);
         ReflectionTestUtils.setField(adminPostService, "postConverter", postConverter);
         ReflectionTestUtils.setField(adminPostService, "notificationService", notificationService);
+        ReflectionTestUtils.setField(adminPostService, "cacheEpoch", new CacheEpoch());
     }
 
     private static Post post(String status) {

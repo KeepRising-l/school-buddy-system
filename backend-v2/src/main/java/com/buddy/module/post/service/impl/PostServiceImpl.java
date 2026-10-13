@@ -3,6 +3,7 @@ package com.buddy.module.post.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
@@ -66,6 +67,10 @@ public class PostServiceImpl implements PostService {
 
     @Autowired
     private AuxStore auxStore;
+
+    /** 全局缓存纪元：帖子集合变化后使推荐缓存失效 */
+    @Autowired
+    private CacheEpoch cacheEpoch;
 
     @Autowired
     private NotificationService notificationService;
@@ -162,6 +167,8 @@ public class PostServiceImpl implements PostService {
         post.setIsAuditPass(1);
 
         postMapper.insert(post);
+        // 让推荐列表缓存失效：否则用户刚发完帖回到广场，5 分钟内看不到自己发的帖子
+        cacheEpoch.bump();
         return post.getId();
     }
 
@@ -357,6 +364,9 @@ public class PostServiceImpl implements PostService {
         if (updated == 0) {
             throw new BusinessException(ResultCode.STATUS_TRANSIT_ERROR, "帖子状态已变化，请刷新后重试");
         }
+
+        // 帖子集合已变化：让推荐列表缓存立即失效（否则广场上这条帖子还会停留最多 5 分钟）
+        cacheEpoch.bump();
 
         // 联动（D-008）：取消所有未完结的报名（PENDING/APPROVED/WAITLIST）。
         // 副作用只在状态转换成功后执行；每条报名同样用条件更新防止并发重复处理

@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.module.credit.service.CreditService;
@@ -64,6 +65,10 @@ public class RecommendServiceImpl implements RecommendService {
     /** 推荐结果缓存（5 分钟 TTL） */
     private final RecommendCache cache = new RecommendCache(5);
 
+    /** 全局缓存纪元：帖子集合变化时使推荐缓存失效 */
+    @Autowired
+    private CacheEpoch cacheEpoch;
+
     @Override
     public IPage<PostVO> getRecommendList(Long userId, int page, int size, String category, String sort, String timeRange, String keyword) {
         // 如果sort为latest或hot，走普通排序逻辑
@@ -102,10 +107,13 @@ public class RecommendServiceImpl implements RecommendService {
     }
 
     /**
-     * 缓存键：用户 + 筛选条件
+     * 缓存键：纪元 + 用户 + 筛选条件。
+     * 纪元参与构成键，使帖子集合变化（发布/取消/下架）后旧缓存立即失效——
+     * 否则用户刚发完帖回到广场，5 分钟内看不到自己的帖子。
      */
     private String buildCacheKey(Long userId, String category, String timeRange, String keyword) {
-        return (userId == null ? "guest" : userId) + "|"
+        return cacheEpoch.current() + "|"
+                + (userId == null ? "guest" : userId) + "|"
                 + (category == null ? "" : category) + "|"
                 + (timeRange == null ? "" : timeRange) + "|"
                 + (keyword == null ? "" : keyword);

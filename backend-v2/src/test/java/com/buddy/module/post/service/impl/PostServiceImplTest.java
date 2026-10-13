@@ -2,6 +2,7 @@ package com.buddy.module.post.service.impl;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
 import com.buddy.common.store.AuxStore;
@@ -89,6 +90,7 @@ class PostServiceImplTest {
         ReflectionTestUtils.setField(postService, "auxStore", auxStore);
         ReflectionTestUtils.setField(postService, "notificationService", notificationService);
         ReflectionTestUtils.setField(postService, "sensitiveWordService", sensitiveWordService);
+        ReflectionTestUtils.setField(postService, "cacheEpoch", new CacheEpoch());
     }
 
     // ===== 发帖 =====
@@ -146,6 +148,20 @@ class PostServiceImplTest {
                 .hasMessageContaining("不能超过5个");
         verify(userMapper).lockById(USER_ID);
         verify(postMapper, never()).insert(any(Post.class));
+    }
+
+    @Test
+    void createBumpsCacheEpoch() {
+        stubCreateCommon(0);
+        CacheEpoch epoch = new CacheEpoch();
+        ReflectionTestUtils.setField(postService, "cacheEpoch", epoch);
+        long before = epoch.current();
+
+        LocalDateTime start = LocalDateTime.now().plusHours(1);
+        postService.createPost(USER_ID, request(start, start.plusHours(1)));
+
+        // 发帖后推荐缓存立即失效：否则刚发的帖子在广场最多 5 分钟看不到
+        assertThat(epoch.current()).isGreaterThan(before);
     }
 
     // ===== 取消帖子 =====

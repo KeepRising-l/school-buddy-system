@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.common.exception.BusinessException;
@@ -39,6 +40,10 @@ public class AdminPostServiceImpl implements AdminPostService {
 
     @Autowired
     private PostMapper postMapper;
+
+    /** 全局缓存纪元：帖子集合变化后使推荐缓存失效 */
+    @Autowired
+    private CacheEpoch cacheEpoch;
 
     @Autowired
     private PostApplyMapper postApplyMapper;
@@ -96,6 +101,9 @@ public class AdminPostServiceImpl implements AdminPostService {
         if (updated == 0) {
             return; // 已处于取消状态，无需重复执行联动
         }
+
+        // 帖子集合已变化：让推荐列表缓存立即失效
+        cacheEpoch.bump();
 
         // 联动：取消该帖所有未完结报名（否则报名记录悬挂"已通过"，用户卡死）
         List<PostApply> applies = postApplyMapper.selectList(
