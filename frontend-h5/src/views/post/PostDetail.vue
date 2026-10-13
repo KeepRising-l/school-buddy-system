@@ -139,7 +139,7 @@
     </div>
 
     <!-- 底部操作区域 -->
-    <div class="bottom-action safe-area-bottom" v-if="post">
+    <div class="bottom-action" v-if="post">
       <!-- 收藏按钮（V1.1） -->
       <div class="fav-btn" @click="handleToggleFavorite">
         <van-icon :name="favorited ? 'star' : 'star-o'" :color="favorited ? '#f59e0b' : '#9ca3af'" size="22" />
@@ -855,7 +855,8 @@ onMounted(loadAll)
 
 <style scoped lang="scss">
 .post-detail-page {
-  padding-bottom: 160px;
+  // 给底部固定操作栏留位，再叠加底部安全区（全面屏手势条）
+  padding-bottom: calc(160px + var(--safe-bottom));
   background: var(--bg-page);
 }
 
@@ -1081,12 +1082,15 @@ onMounted(loadAll)
 .bottom-action {
   position: fixed;
   bottom: 0;
-  left: 0;
-  right: 0;
+  // 居中 + 限宽：大屏（PC / 平板）下与 H5 列对齐，不铺满整个窗口
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, var(--app-max-width));
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  padding: 10px 16px;
+  // 底部安全区：全面屏手势条高度，避免按钮被系统手势区盖住
+  padding: 10px 16px calc(10px + var(--safe-bottom));
   border-top: 1px solid var(--border-light);
 
   .fav-btn {

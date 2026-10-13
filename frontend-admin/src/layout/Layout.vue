@@ -1,5 +1,5 @@
 <template>
-  <el-container style="height: 100vh">
+  <el-container style="height: 100vh; height: 100dvh">
     <el-aside :width="isCollapse ? '64px' : '220px'" style="transition: width 0.3s">
       <Sidebar :is-collapse="isCollapse" />
     </el-aside>

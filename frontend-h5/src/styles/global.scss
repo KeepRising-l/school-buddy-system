@@ -61,6 +61,13 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  // ----- 移动端适配 -----
+  // 安全区高度：依赖 index.html 的 viewport-fit=cover 才非 0（非全面屏为 0，不影响普通机型）
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  // H5 的最大宽度：超过后在屏幕中居中（PC / 平板打开时不把卡片拉成超宽条）
+  --app-max-width: 480px;
+
   // ============================================================
   // Vant 4 主题覆写（不改组件源码，全走 CSS 变量）
   // ============================================================
@@ -143,29 +150,60 @@
   box-sizing: border-box;
 }
 
+html {
+  // 防止系统「大字体」设置或横屏时浏览器二次放大字号，导致布局被撑破
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
-body,
-#app {
+body {
   width: 100%;
   min-height: 100vh;
+  // dvh = 动态视口高度：移动端地址栏收起/展开时 100vh 不跟着变，底部会出现被裁或闪动
+  min-height: 100dvh;
   font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'MiSans', 'Helvetica Neue',
     'Microsoft YaHei', sans-serif;
-  background: var(--bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
   color: var(--text-primary);
 }
 
+body {
+  // 大屏（PC / 平板）下两侧的底色，只在 H5 列之外露出
+  background: #e8eaed;
+  // 抑制 iOS 橡皮筋滚动与下拉刷新：它们会把 fixed 的悬浮胶囊 / 底部操作栏一起拖走
+  overscroll-behavior-y: none;
+}
+
+// App 根容器：大屏居中 + 顶部安全区
+#app {
+  position: relative;
+  width: 100%;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-page);
+  // 刘海屏 / 灵动岛：整体下移状态栏高度（底部由各 fixed 元素各自处理）
+  padding-top: var(--safe-top);
+  // 大屏时给中间这条"H5 列"一点立体感，手机上看不到
+  box-shadow: 0 0 80px -40px rgba(0, 0, 0, 0.28);
+}
+
 // ----- 页面通用容器 -----
 .page {
-  min-height: 100vh;
+  // 减去 #app 的顶部安全区内边距：否则整页会比视口高出安全区那么多，产生多余的可滚动空白
+  min-height: calc(100vh - var(--safe-top));
+  min-height: calc(100dvh - var(--safe-top));
   background: var(--bg-page);
 }
 
 // 带底部导航的页面容器
 .page-with-tabbar {
-  padding-bottom: 84px; // 给悬浮胶囊留足空间
+  // 84px 给悬浮胶囊留位，再叠加底部安全区（胶囊本身会被安全区顶上去）
+  padding-bottom: calc(84px + var(--safe-bottom));
 }
 
 // 内容区域
@@ -266,9 +304,16 @@ body,
 }
 
 // ----- 安全区域 -----
+// 显式工具类：用 !important 保证能覆盖组件自身的 padding 简写。
+// 注意它会把 padding-bottom 直接替换为安全区高度，所以**只能用在自身没有底部内边距的元素上**
+// （需要保留原内边距时，请在组件内写 padding-bottom: calc(原值 + var(--safe-bottom))）
 .safe-area-bottom {
-  padding-bottom: constant(safe-area-inset-bottom);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom) !important;
+}
+
+// ----- 顶部安全区（需要自己铺满状态栏的整块头部用）-----
+.safe-area-top {
+  padding-top: var(--safe-top) !important;
 }
 
 // ----- 通用过渡 -----
@@ -289,19 +334,42 @@ body,
 }
 
 // ----- 路由过渡动画（App.vue 使用）-----
+// 只用 opacity，不加 transform：动画期间若元素带 transform，会给后代的 position: fixed
+// 元素制造一个新的定位基准（containing block），底部悬浮胶囊 / 操作栏会在切页瞬间
+// 相对"页面元素"而不是"视口"定位——页面一长它就跑到文档最底部，等于消失半秒。
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+  transition: opacity 0.22s var(--ease);
 }
 
-.page-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
+.page-fade-enter-from,
 .page-fade-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+}
+
+// ============================================================
+// 移动端适配（2026-10 加固）
+// ============================================================
+
+// iOS Safari 在聚焦 font-size < 16px 的输入框时会自动放大整个页面（Vant Field 默认 14px），
+// 这里把输入类控件提到 16px 规避；用 @supports 限定，只影响 iOS 内核
+@supports (-webkit-touch-callout: none) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+// 大屏（PC / 平板）下弹层跟随 H5 列的宽度，避免底部弹层铺满整个窗口、与居中的页面错位。
+// 不用 transform 定位是为了不破坏 Vant 自身的滑入动画。
+@media (min-width: 481px) {
+  .van-popup--bottom,
+  .van-popup--top {
+    left: 50%;
+    width: var(--app-max-width);
+    margin-left: calc(var(--app-max-width) / -2);
+  }
 }
 
 // ----- 无障碍：尊重系统减弱动效 -----

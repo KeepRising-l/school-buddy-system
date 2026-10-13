@@ -2,7 +2,24 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!--
+    viewport-fit=cover：让页面铺满全面屏（刘海/灵动岛/手势条区域），
+    这是 env(safe-area-inset-*) 能取到非 0 值的前提，缺了它下面所有安全区样式都会失效。
+    maximum-scale + user-scalable=no：H5 按原生 App 的体感设计，禁止双击/双指缩放导致的错位。
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- 关闭 iOS 对数字/邮箱/地址的自动识别：页面上有学号、手机号，否则会被渲染成蓝色电话链接 -->
+  <meta name="format-detection" content="telephone=no,email=no,address=no" />
+  <!-- 移动端浏览器地址栏配色（Android Chrome / 微信） -->
+  <meta name="theme-color" content="#10a37f" />
+  <!-- 添加到主屏后以全屏 App 形态打开（iOS + Android） -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="校园搭子" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- iOS 添加到主屏后的桌面图标（iOS 会自行裁圆角，故图标本身是满幅方图） -->
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>校园搭子</title>
 </head>
 <body>

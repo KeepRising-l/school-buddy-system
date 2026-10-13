@@ -108,7 +108,9 @@ const handleLogin = async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 100vh;
+  // 减去 #app 的顶部安全区，避免整页比视口高出一截产生多余滚动
+  min-height: calc(100vh - var(--safe-top));
+  min-height: calc(100dvh - var(--safe-top));
   background: var(--bg-page);
   position: relative;
   overflow: hidden;
