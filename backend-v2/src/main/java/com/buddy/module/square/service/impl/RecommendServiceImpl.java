@@ -292,11 +292,13 @@ public class RecommendServiceImpl implements RecommendService {
         // 时间筛选
         applyTimeRangeFilter(wrapper, timeRange);
 
-        // 热度 = 报名人数；兼容前端 hottest 与后端 hot 两种取值
+        // 热度 = 报名人数；兼容前端 hottest 与后端 hot 两种取值。
+        // 两种排序都追加 id 作为兜底键：created_time 只精确到秒，报名人数更是大量重复，
+        // 不加兜底键时并列行的返回顺序由执行计划决定（不确定），翻页时还可能重复/漏行。
         if ("hot".equals(sort) || "hottest".equals(sort)) {
-            wrapper.orderByDesc(Post::getCurrentPeople);
+            wrapper.orderByDesc(Post::getCurrentPeople).orderByDesc(Post::getId);
         } else {
-            wrapper.orderByDesc(Post::getCreatedTime);
+            wrapper.orderByDesc(Post::getCreatedTime).orderByDesc(Post::getId);
         }
 
         IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);

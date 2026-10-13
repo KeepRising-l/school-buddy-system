@@ -4,6 +4,8 @@
 -- 背景：init-all.sql / more-posts.sql 里的示例帖子时间都是固定的过去日期，
 --       导入后会被「帖子状态推进」定时任务很快推到 FINISHED，
 --       导致广场（只展示招募中/进行中）看起来是空的。
+--       发布时间也**刻意错开**（而不是都用 NOW()）：created_time 只精确到秒，
+--       一批帖子若同秒发布，广场「最新」排序里它们的先后是未定义的（实测看起来像乱序）。
 --       本脚本用相对时间（NOW() + INTERVAL）生成一批未来的组局帖，
 --       因此**任何时候执行都有效**，答辩演示前跑一次即可。
 --
@@ -26,7 +28,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170101'),
         DATE_ADD(NOW(), INTERVAL 2 HOUR), DATE_ADD(NOW(), INTERVAL 4 HOUR),
         '东区篮球场 2 号场', 6, 3, 3, 0,
         '常规三对三，强度中等，欢迎熟手加入。\n自备球鞋，场地已预约，迟到请提前说一声。',
-        'RECRUITING', 128, 6, 1, NOW(), NOW(), 0);
+        'RECRUITING', 128, 6, 1, DATE_SUB(NOW(), INTERVAL 8 MINUTE), NOW(), 0);
 SET @p1 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -42,7 +44,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170102'),
         DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 1 DAY), INTERVAL 21 HOUR),
         '体育馆羽毛球场 3 号场', 4, 2, 0, 0,
         '打两小时，球我带了。欢迎新手，主要是活动活动。',
-        'RECRUITING', 86, 3, 1, NOW(), NOW(), 0);
+        'RECRUITING', 86, 3, 1, DATE_SUB(NOW(), INTERVAL 16 MINUTE), NOW(), 0);
 SET @p2 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -58,7 +60,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170103'),
         DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 1 DAY), INTERVAL 23 HOUR),
         '线上开黑（语音房）', 5, 2, 4, 0,
         '目标星耀以上，要求高手段位，会报点、不喷人。',
-        'RECRUITING', 214, 12, 1, NOW(), NOW(), 0);
+        'RECRUITING', 214, 12, 1, DATE_SUB(NOW(), INTERVAL 20 MINUTE), NOW(), 0);
 SET @p3 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -74,7 +76,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170104'),
         DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 2 DAY), INTERVAL 18 HOUR),
         '大学城「迷雾」剧本杀店', 4, 3, 0, 0,
         '硬核推理本，时长约 4 小时，人均 68 元。还差 1 人，凑齐就约。',
-        'RECRUITING', 167, 9, 1, NOW(), NOW(), 0);
+        'RECRUITING', 167, 9, 1, DATE_SUB(NOW(), INTERVAL 28 MINUTE), NOW(), 0);
 SET @p4 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -90,7 +92,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170105'),
         DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 2 DAY), INTERVAL 7 HOUR),
         '南区田径场入口', 8, 1, 0, 0,
         '配速 6 分半左右，跟不上也没关系，跑完在食堂集合。',
-        'RECRUITING', 92, 4, 1, NOW(), NOW(), 0);
+        'RECRUITING', 92, 4, 1, DATE_SUB(NOW(), INTERVAL 24 MINUTE), NOW(), 0);
 SET @p5 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -106,7 +108,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170106'),
         DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 1 DAY), INTERVAL 17 HOUR),
         '图书馆 3 楼自习区', 6, 2, 0, 0,
         '考研/期末冲刺都可以，手机统一静音，中午一起吃食堂。',
-        'RECRUITING', 143, 11, 1, NOW(), NOW(), 0);
+        'RECRUITING', 143, 11, 1, DATE_SUB(NOW(), INTERVAL 12 MINUTE), NOW(), 0);
 SET @p6 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -123,7 +125,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170108'),
         DATE_ADD(NOW(), INTERVAL 25 MINUTE), DATE_ADD(NOW(), INTERVAL 85 MINUTE),
         '南区操场主席台前', 6, 1, 0, 0,
         '轻松跑 4 公里，边跑边聊。这条帖子开始时间很近，用来观察系统的活动提醒通知。',
-        'RECRUITING', 37, 1, 1, NOW(), NOW(), 0);
+        'RECRUITING', 37, 1, 1, DATE_SUB(NOW(), INTERVAL 4 MINUTE), NOW(), 0);
 SET @p7 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
@@ -139,7 +141,7 @@ VALUES ((SELECT id FROM `sys_user` WHERE `student_no` = '2442170109'),
         DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 3 DAY), INTERVAL 18 HOUR),
         '西区足球场', 14, 6, 0, 0,
         '每周固定的友谊赛，缺后卫，穿好球鞋和护腿板。',
-        'RECRUITING', 198, 8, 1, NOW(), NOW(), 0);
+        'RECRUITING', 198, 8, 1, DATE_SUB(NOW(), INTERVAL 32 MINUTE), NOW(), 0);
 SET @p8 = LAST_INSERT_ID();
 
 -- -------------------------------------------------------------
