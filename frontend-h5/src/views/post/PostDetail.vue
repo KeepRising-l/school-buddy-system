@@ -213,14 +213,14 @@
           >
             去评价
           </van-button>
-          <!-- 已报名待审核 -->
+          <!-- 已报名待审核（帖子已结束/取消时不再显示"等待审核中"：不会再有人审核了） -->
           <van-button
             v-else-if="applyStatus === 'PENDING'"
             disabled
             round
             block
           >
-            等待审核中
+            {{ postClosedText || '等待审核中' }}
           </van-button>
           <!-- 已加入/已出勤 -->
           <template v-else-if="applyStatus === 'APPROVED' || applyStatus === 'ATTENDED'">
@@ -228,9 +228,9 @@
             <!-- 活动进行中/已结束时不给"取消报名"入口（后端同样不允许） -->
             <van-button v-if="applyStatus === 'APPROVED' && canCancelApply" plain type="danger" round block @click="handleCancelApply">取消报名</van-button>
           </template>
-          <!-- 候补中（V1.1） -->
+          <!-- 候补中（V1.1）；帖子已结束/取消时不再显示"候补中"：不会再有递补了 -->
           <template v-else-if="applyStatus === 'WAITLIST'">
-            <van-button disabled round block>候补中</van-button>
+            <van-button disabled round block>{{ postClosedText || '候补中' }}</van-button>
             <van-button v-if="canCancelApply" plain type="danger" round block @click="handleCancelApply">取消候补</van-button>
           </template>
           <!-- 已满员（未报名）→ 可候补（V1.1） -->
@@ -426,6 +426,19 @@ const applyStatus = computed(() => {
 const canCancelApply = computed(() => {
   const status = post.value?.status
   return status === 'RECRUITING' || status === 'FULL'
+})
+
+/**
+ * 帖子已"关闭"（不会再有审核/递补/取消入口）时的状态文案。
+ * PENDING/WAITLIST 的报名挂在已结束/进行中/已取消的帖子上时，
+ * 继续显示"等待审核中/候补中"属于误导——如实展示帖子当前状态。
+ */
+const postClosedText = computed(() => {
+  const status = post.value?.status
+  if (status === 'CANCELLED') return '该组局已取消'
+  if (status === 'ONGOING') return '活动进行中'
+  if (status === 'FINISHED') return '活动已结束'
+  return ''
 })
 
 // 已通过报名者的联系方式列表（缺口#5：发布者与其他已成行成员可见，自己不再重复展示）
@@ -684,20 +697,24 @@ const handleCancelPost = async () => {
   }
 }
 
-// 取消报名
+// 取消报名 / 取消候补（两个入口共用本函数，文案必须区分）
 const handleCancelApply = async () => {
+  // 候补取消不扣分：后端仅对「已通过（APPROVED）且活动开始前1小时内取消」扣5分，
+  // 原来候补取消也弹"扣除5信誉分"属于假信息
+  const isWaitlist = applyStatus.value === 'WAITLIST'
   try {
-    // 提示信誉影响：活动开始前1小时内取消将扣5信誉分
     await showConfirmDialog({
-      title: '取消报名',
-      message: '确定要取消报名吗？活动开始前1小时内取消将扣除5信誉分。',
+      title: isWaitlist ? '取消候补' : '取消报名',
+      message: isWaitlist
+        ? '确定要取消候补吗？取消候补不会扣除信誉分。'
+        : '确定要取消报名吗？活动开始前1小时内取消将扣除5信誉分。',
       confirmButtonText: '确定取消',
       cancelButtonText: '再想想'
     })
     const applyId = post.value?.myApplyId
     if (applyId) {
       await cancelApply(applyId)
-      showToast('已取消报名')
+      showToast(isWaitlist ? '已取消候补' : '已取消报名')
       await fetchDetail()
     }
   } catch (err) {
