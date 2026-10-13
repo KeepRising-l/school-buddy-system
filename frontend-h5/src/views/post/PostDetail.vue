@@ -225,12 +225,13 @@
           <!-- 已加入/已出勤 -->
           <template v-else-if="applyStatus === 'APPROVED' || applyStatus === 'ATTENDED'">
             <van-button disabled round block>{{ applyStatus === 'ATTENDED' ? '已出勤' : '已加入' }}</van-button>
-            <van-button v-if="applyStatus === 'APPROVED'" plain type="danger" round block @click="handleCancelApply">取消报名</van-button>
+            <!-- 活动进行中/已结束时不给"取消报名"入口（后端同样不允许） -->
+            <van-button v-if="applyStatus === 'APPROVED' && canCancelApply" plain type="danger" round block @click="handleCancelApply">取消报名</van-button>
           </template>
           <!-- 候补中（V1.1） -->
           <template v-else-if="applyStatus === 'WAITLIST'">
             <van-button disabled round block>候补中</van-button>
-            <van-button plain type="danger" round block @click="handleCancelApply">取消候补</van-button>
+            <van-button v-if="canCancelApply" plain type="danger" round block @click="handleCancelApply">取消候补</van-button>
           </template>
           <!-- 已满员（未报名）→ 可候补（V1.1） -->
           <template v-else-if="post.status === 'FULL'">
@@ -414,6 +415,17 @@ const canMarkAttendance = computed(() => {
 // 当前用户的报名状态
 const applyStatus = computed(() => {
   return post.value?.applyStatus || ''
+})
+
+/**
+ * 是否还能取消报名/候补。
+ * 与后端 ApplyServiceImpl.cancelApply 的规则保持一致：只有「招募中 / 已满员」才允许取消；
+ * 活动进行中或已结束一律不给出入口——否则按钮点下去必然被后端拒绝（"活动已开始或已结束，无法取消报名"），
+ * 用户白跑一趟确认弹窗才看到报错。
+ */
+const canCancelApply = computed(() => {
+  const status = post.value?.status
+  return status === 'RECRUITING' || status === 'FULL'
 })
 
 // 已通过报名者的联系方式列表（缺口#5：发布者与其他已成行成员可见，自己不再重复展示）
