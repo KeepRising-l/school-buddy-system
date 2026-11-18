@@ -25,4 +25,12 @@ public class AnnouncementController {
     public R<SysAnnouncement> getLatestPopup() {
         return R.ok(announcementService.getLatestPopup());
     }
+
+    /**
+     * 获取当前生效中的公告列表（首页顶部滚动公告栏）
+     */
+    @GetMapping("/active-list")
+    public R<java.util.List<SysAnnouncement>> getActiveList() {
+        return R.ok(announcementService.getActiveList());
+    }
 }

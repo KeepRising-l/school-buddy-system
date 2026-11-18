@@ -163,4 +163,18 @@ public class UserController {
         userService.setProfilePrivacy(userId, privacy);
         return R.ok();
     }
+
+    /**
+     * 修改登录密码
+     * body: {oldPassword: "xxx", newPassword: "yyy"}
+     */
+    @RequireLogin
+    @PutMapping("/password")
+    public R<Void> updatePassword(@RequestBody Map<String, Object> body) {
+        Long userId = UserContext.getUserId();
+        String oldPassword = body == null || body.get("oldPassword") == null ? null : body.get("oldPassword").toString();
+        String newPassword = body == null || body.get("newPassword") == null ? null : body.get("newPassword").toString();
+        userService.updatePassword(userId, oldPassword, newPassword);
+        return R.ok();
+    }
 }

@@ -723,6 +723,58 @@ public class ApplyServiceImpl implements ApplyService {
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void checkinByCode(Long userId, Long postId, String code) {
+        if (code == null || !code.trim().matches("^\\d{4}$")) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "请输入4位数字签到码");
+        }
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "帖子不存在");
+        }
+        // 允许在活动开始前30分钟内、进行中(ONGOING)或结束后24小时内自助签到
+        LocalDateTime now = LocalDateTime.now();
+        boolean inTimeWindow = PostStatus.ONGOING.equals(post.getStatus())
+                || (PostStatus.FINISHED.equals(post.getStatus())
+                        && post.getEndTime() != null && !now.isAfter(post.getEndTime().plusHours(24)))
+                || ((PostStatus.RECRUITING.equals(post.getStatus()) || PostStatus.FULL.equals(post.getStatus()))
+                        && post.getStartTime() != null && !now.isBefore(post.getStartTime().minusMinutes(30)));
+        if (!inTimeWindow) {
+            throw new BusinessException("仅可在活动开始前30分钟至活动结束后24小时内签到");
+        }
+
+        String expectedCode = PostStateMachine.generateCheckinCode(post.getId(), post.getPublisherId(), post.getStartTime());
+        if (!expectedCode.equals(code.trim())) {
+            throw new BusinessException("签到码不正确，请向发布者确认4位活动签到码");
+        }
+
+        PostApply myApply = postApplyMapper.selectOne(
+                new LambdaQueryWrapper<PostApply>()
+                        .eq(PostApply::getPostId, postId)
+                        .eq(PostApply::getApplicantId, userId)
+                        .last("LIMIT 1")
+        );
+        if (myApply == null) {
+            throw new BusinessException("您未报名该活动");
+        }
+        if (ApplyStatus.ATTENDED.equals(myApply.getStatus())) {
+            return; // 幂等：已签到直接成功
+        }
+        if (!ApplyStatus.APPROVED.equals(myApply.getStatus())) {
+            throw new BusinessException("仅已通过审核的报名者可签到");
+        }
+
+        int updated = postApplyMapper.update(null, new LambdaUpdateWrapper<PostApply>()
+                .eq(PostApply::getId, myApply.getId())
+                .eq(PostApply::getStatus, ApplyStatus.APPROVED)
+                .set(PostApply::getStatus, ApplyStatus.ATTENDED)
+                .set(PostApply::getHandleTime, LocalDateTime.now()));
+        if (updated == 0) {
+            throw new BusinessException("报名状态已变更，请刷新后重试");
+        }
+    }
+
     /** ApplyVO 基础字段拷贝 */
     private ApplyVO toApplyVO(PostApply apply) {
         ApplyVO vo = new ApplyVO();

@@ -36,4 +36,14 @@ public class SquareController {
         Long userId = UserContext.getUserId();
         return R.ok(recommendService.getRecommendList(userId, page, size, category, sort, timeRange, keyword));
     }
+
+    /**
+     * 广场顶部「你可能感兴趣」精选推荐位（闭合 PRD 5.3.2 缺口）
+     */
+    @GetMapping("/featured")
+    public R<java.util.List<PostVO>> getFeatured(@RequestParam(defaultValue = "5") int limit) {
+        Long userId = UserContext.getUserId();
+        int safeLimit = Math.max(1, Math.min(limit, 10));
+        return R.ok(recommendService.getFeaturedList(userId, safeLimit));
+    }
 }

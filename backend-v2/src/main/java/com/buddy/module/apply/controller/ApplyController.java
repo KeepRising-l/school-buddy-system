@@ -155,4 +155,21 @@ public class ApplyController {
         applyService.markAttendance(userId, id, attended);
         return R.ok();
     }
+
+    /**
+     * 参与者输入4位签到码自助核销出勤
+     * body: {postId: 1, code: "1234"}
+     */
+    @RequireLogin
+    @PostMapping("/checkin")
+    public R<Void> checkinByCode(@RequestBody Map<String, Object> body) {
+        Long userId = UserContext.getUserId();
+        Long postId = parsePostId(body);
+        Object codeObj = body == null ? null : body.get("code");
+        if (codeObj == null || codeObj.toString().trim().isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "请输入签到码");
+        }
+        applyService.checkinByCode(userId, postId, codeObj.toString().trim());
+        return R.ok();
+    }
 }

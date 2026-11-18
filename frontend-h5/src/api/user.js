@@ -12,3 +12,4 @@ export const uploadAvatar = (formData) => request.post('/api/file/upload', formD
 // 个人主页（V1.1）
 export const getUserProfile = (userId) => request.get(`/api/user/profile/${userId}`)
 export const setProfilePrivacy = (privacy) => request.put('/api/user/privacy', { privacy })
+export const updatePassword = (data) => request.put('/api/user/password', data)

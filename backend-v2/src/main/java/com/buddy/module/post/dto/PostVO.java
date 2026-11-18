@@ -60,4 +60,10 @@ public class PostVO {
     private Integer isAuditPass;
 
     private LocalDateTime createdTime;
+
+    /** 可解释推荐理由标签列表（如：契合你的羽毛球、满分靠谱局主、差1人成局） */
+    private java.util.List<String> recommendReasons;
+
+    /** 推荐契合度百分比（0-99） */
+    private Integer matchScore;
 }

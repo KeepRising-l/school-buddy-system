@@ -279,6 +279,11 @@ public class PostServiceImpl implements PostService {
         if (contactVisible && publisher != null) {
             detailVO.setPublisherContact(publisher.getPhone());
         }
+        // 活动签到码：仅发布者本人可见，用于线下向已通过参与者出示以自助核销出勤
+        if (isOwner) {
+            detailVO.setCheckinCode(PostStateMachine.generateCheckinCode(
+                    post.getId(), post.getPublisherId(), post.getStartTime()));
+        }
 
         if (publisher != null) {
             detailVO.setPublisherNickname(publisher.getNickname());

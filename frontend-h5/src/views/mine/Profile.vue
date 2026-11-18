@@ -75,7 +75,49 @@
       >
         保存
       </van-button>
+
+      <!-- 修改密码入口 -->
+      <van-button
+        plain
+        type="primary"
+        block
+        round
+        class="pwd-btn"
+        @click="showPwdDialog = true"
+      >
+        修改登录密码
+      </van-button>
     </div>
+
+    <!-- 修改密码弹窗 -->
+    <van-dialog
+      v-model:show="showPwdDialog"
+      title="修改登录密码"
+      show-cancel-button
+      confirm-button-text="确认修改"
+      :before-close="onPwdConfirm"
+    >
+      <div style="padding: 12px 16px">
+        <van-field
+          v-model="pwdForm.oldPassword"
+          type="password"
+          label="原密码"
+          placeholder="请输入原密码"
+        />
+        <van-field
+          v-model="pwdForm.newPassword"
+          type="password"
+          label="新密码"
+          placeholder="8-20位，含字母和数字"
+        />
+        <van-field
+          v-model="pwdForm.confirmPassword"
+          type="password"
+          label="确认新密码"
+          placeholder="请再次输入新密码"
+        />
+      </div>
+    </van-dialog>
   </div>
 </template>
 
@@ -83,7 +125,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getProfile, updateProfile, uploadAvatar } from '@/api/user'
+import { getProfile, updateProfile, uploadAvatar, updatePassword } from '@/api/user'
 import { useUserStore } from '@/store/user'
 import UserAvatar from '@/components/UserAvatar.vue'
 
@@ -200,9 +242,55 @@ const handleSave = async () => {
 onMounted(() => {
   fetchProfile()
 })
+
+// 修改密码逻辑
+const showPwdDialog = ref(false)
+const pwdForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const onPwdConfirm = async (action) => {
+  if (action !== 'confirm') {
+    pwdForm.oldPassword = ''
+    pwdForm.newPassword = ''
+    pwdForm.confirmPassword = ''
+    return true
+  }
+  if (!pwdForm.oldPassword) {
+    showToast('请输入原密码')
+    return false
+  }
+  if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,20}$/.test(pwdForm.newPassword)) {
+    showToast('新密码需8-20位，且包含字母和数字')
+    return false
+  }
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+    showToast('两次输入的新密码不一致')
+    return false
+  }
+  try {
+    await updatePassword({
+      oldPassword: pwdForm.oldPassword,
+      newPassword: pwdForm.newPassword
+    })
+    showToast('密码修改成功')
+    pwdForm.oldPassword = ''
+    pwdForm.newPassword = ''
+    pwdForm.confirmPassword = ''
+    return true
+  } catch (e) {
+    return false
+  }
+}
 </script>
 
 <style scoped lang="scss">
+.pwd-btn {
+  margin-top: 14px;
+  height: 44px;
+}
 .profile-page {
   background: var(--bg-page);
 }

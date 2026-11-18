@@ -53,4 +53,18 @@ public class PostStateMachine {
         Set<String> allowedTargets = TRANSITIONS.get(from);
         return allowedTargets != null && allowedTargets.contains(to);
     }
+
+    /**
+     * 生成帖子专属4位数字活动签到码（基于 postId + publisherId + startTime 确定性派生，零DDL变更且跨重启一致）
+     */
+    public static String generateCheckinCode(Long postId, Long publisherId, java.time.LocalDateTime startTime) {
+        long seed = java.util.Objects.hash(
+                postId,
+                publisherId,
+                startTime != null ? startTime.toLocalDate() : 0,
+                "SchoolBuddyCheckin2026"
+        );
+        int code = (int) (Math.abs(seed) % 9000L) + 1000;
+        return String.valueOf(code);
+    }
 }

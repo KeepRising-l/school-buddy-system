@@ -25,6 +25,9 @@ public class PostStatusTask {
     private PostMapper postMapper;
 
     @Autowired(required = false)
+    private com.buddy.module.apply.mapper.PostApplyMapper postApplyMapper;
+
+    @Autowired(required = false)
     private CacheEpoch cacheEpoch;
 
     /**
@@ -64,6 +67,45 @@ public class PostStatusTask {
                 cacheEpoch.bump();
             }
             log.info("已将 {} 条帖子状态更新为 FINISHED", count);
+        }
+    }
+
+    /**
+     * 每10分钟执行：活动结束超过24小时且发布者未标记出勤的 APPROVED 报名，自动默认转为 ATTENDED（守约兜底），
+     * 解决发布者忘记标记出勤导致参与者永远无法评价的闭环死锁
+     */
+    @Scheduled(cron = "0 */10 * * * ?")
+    public void settleDefaultAttendance() {
+        if (postApplyMapper == null) {
+            return;
+        }
+        LocalDateTime deadline = LocalDateTime.now().minusHours(24);
+        java.util.List<Post> expiredFinishedPosts = postMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Post>()
+                        .select(Post::getId)
+                        .eq(Post::getStatus, PostStatus.FINISHED)
+                        .le(Post::getEndTime, deadline)
+        );
+        if (expiredFinishedPosts == null || expiredFinishedPosts.isEmpty()) {
+            return;
+        }
+        java.util.List<Long> postIds = new java.util.ArrayList<>(expiredFinishedPosts.size());
+        for (Post p : expiredFinishedPosts) {
+            if (p != null && p.getId() != null) {
+                postIds.add(p.getId());
+            }
+        }
+        if (postIds.isEmpty()) {
+            return;
+        }
+        int settled = postApplyMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.buddy.module.apply.entity.PostApply>()
+                        .in(com.buddy.module.apply.entity.PostApply::getPostId, postIds)
+                        .eq(com.buddy.module.apply.entity.PostApply::getStatus, com.buddy.common.constant.ApplyStatus.APPROVED)
+                        .set(com.buddy.module.apply.entity.PostApply::getStatus, com.buddy.common.constant.ApplyStatus.ATTENDED)
+                        .set(com.buddy.module.apply.entity.PostApply::getHandleTime, LocalDateTime.now()));
+        if (settled > 0) {
+            log.info("超时24h未标记出勤自动守约兜底：已将 {} 条报名更新为 ATTENDED", settled);
         }
     }
 }

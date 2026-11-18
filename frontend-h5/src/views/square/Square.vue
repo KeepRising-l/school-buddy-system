@@ -19,6 +19,48 @@
         />
       </div>
 
+      <!-- 系统公告滚动横幅（闭合 P1-2 公告未接入缺口） -->
+      <div class="notice-wrap" v-if="activeNotice">
+        <van-notice-bar
+          left-icon="volume-o"
+          :text="`${activeNotice.title}：${activeNotice.content}`"
+          color="#0d8a6a"
+          background="#ecfdf5"
+          mode="closeable"
+          class="campus-notice-bar"
+          @click="showNoticeDetail(activeNotice)"
+        />
+      </div>
+
+      <!-- 你可能感兴趣 · 横向精选推荐位（闭合 PRD 5.3.2 缺口） -->
+      <div class="featured-section" v-if="featuredList.length > 0 && !keyword && !currentCategory">
+        <div class="featured-header">
+          <span class="featured-title">✨ 你可能感兴趣</span>
+          <span class="featured-sub">基于兴趣与信誉智能撮合</span>
+        </div>
+        <div class="featured-scroll">
+          <div
+            v-for="item in featuredList"
+            :key="'feat-' + item.id"
+            class="featured-card"
+            @click="goDetail(item.id)"
+          >
+            <div class="feat-top">
+              <span class="feat-cat">{{ item.category }}<template v-if="item.tagName"> · {{ item.tagName }}</template></span>
+              <span class="feat-match" v-if="item.matchScore">{{ item.matchScore }}% 契合</span>
+            </div>
+            <div class="feat-title text-ellipsis">{{ item.title }}</div>
+            <div class="feat-meta">
+              <span><van-icon name="location-o" /> {{ item.location }}</span>
+              <span>{{ item.currentPeople }}/{{ item.maxPeople }}人</span>
+            </div>
+            <div class="feat-reasons" v-if="item.recommendReasons && item.recommendReasons.length">
+              <span v-for="r in item.recommendReasons" :key="r" class="feat-reason-tag">{{ r }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 分类筛选标签 -->
       <div class="filter-section">
         <div class="filter-scroll">
@@ -90,13 +132,63 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getSquareList } from '@/api/post'
+import { showDialog } from 'vant'
+import { getSquareList, getFeaturedPosts } from '@/api/post'
 import { getAllCategories } from '@/api/tag'
+import { getLatestPopup, getActiveAnnouncements } from '@/api/announcement'
 import TabbarLayout from '@/components/TabbarLayout.vue'
 import PostCard from '@/components/PostCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
+
+// 公告与横向精选推荐位
+const activeNotice = ref(null)
+const featuredList = ref([])
+
+const fetchAnnouncements = async () => {
+  try {
+    const [popupRes, listRes] = await Promise.allSettled([
+      getLatestPopup(),
+      getActiveAnnouncements()
+    ])
+    if (listRes.status === 'fulfilled' && Array.isArray(listRes.value?.data) && listRes.value.data.length > 0) {
+      activeNotice.value = listRes.value.data[0]
+    }
+    if (popupRes.status === 'fulfilled' && popupRes.value?.data?.id) {
+      const popup = popupRes.value.data
+      const readKey = `buddy_popup_read_${popup.id}`
+      if (!localStorage.getItem(readKey)) {
+        localStorage.setItem(readKey, '1')
+        showDialog({
+          title: popup.title || '系统公告',
+          message: popup.content || '',
+          confirmButtonText: '我知道了'
+        }).catch(() => {})
+      }
+    }
+  } catch (e) {
+    // 静默忽略
+  }
+}
+
+const showNoticeDetail = (notice) => {
+  if (!notice) return
+  showDialog({
+    title: notice.title || '校园公告',
+    message: notice.content || '',
+    confirmButtonText: '知道了'
+  }).catch(() => {})
+}
+
+const fetchFeatured = async () => {
+  try {
+    const res = await getFeaturedPosts(5)
+    featuredList.value = res.data || []
+  } catch (e) {
+    featuredList.value = []
+  }
+}
 
 // 分类筛选（V1.2 动态加载：跟随管理端分类配置，新增/禁用自动同步；失败回退内置列表）
 const defaultCategories = [
@@ -234,6 +326,8 @@ const goDetail = (id) => {
 
 onMounted(() => {
   fetchCategories()
+  fetchAnnouncements()
+  fetchFeatured()
 })
 </script>
 
@@ -381,5 +475,110 @@ onMounted(() => {
 
 .post-list {
   padding-top: 4px;
+}
+
+.notice-wrap {
+  margin: 12px 16px 0;
+
+  .campus-notice-bar {
+    border-radius: 14px;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(16, 163, 127, 0.08);
+    cursor: pointer;
+  }
+}
+
+.featured-section {
+  margin: 14px 0 2px;
+
+  .featured-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 18px 8px;
+
+    .featured-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .featured-sub {
+      font-size: 11px;
+      color: var(--text-hint);
+    }
+  }
+
+  .featured-scroll {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+    padding: 2px 16px 6px;
+    -webkit-overflow-scrolling: touch;
+
+    &::-webkit-scrollbar { display: none; }
+
+    .featured-card {
+      flex-shrink: 0;
+      width: 210px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #ffffff, #f3faf7);
+      border: 1px solid rgba(16, 163, 127, 0.16);
+      box-shadow: 0 8px 20px -12px rgba(16, 163, 127, 0.22);
+      cursor: pointer;
+
+      .feat-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+
+        .feat-cat {
+          font-size: 11px;
+          color: var(--primary-dark);
+          font-weight: 600;
+        }
+
+        .feat-match {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 1px 6px;
+          border-radius: 999px;
+          background: var(--primary);
+          color: #fff;
+        }
+      }
+
+      .feat-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+      }
+
+      .feat-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--text-hint);
+        margin-bottom: 6px;
+      }
+
+      .feat-reasons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+
+        .feat-reason-tag {
+          font-size: 10px;
+          padding: 1px 6px;
+          border-radius: 6px;
+          background: rgba(16, 163, 127, 0.1);
+          color: #0d8a6a;
+        }
+      }
+    }
+  }
 }
 </style>

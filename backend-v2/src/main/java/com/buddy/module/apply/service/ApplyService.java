@@ -32,4 +32,9 @@ public interface ApplyService {
     IPage<ApplyVO> getReceivedApplies(Long userId, int page, int size);
 
     void markAttendance(Long publisherId, Long applyId, boolean attended);
+
+    /**
+     * 参与者通过发布者出示的4位数字签到码自助完成出勤核销
+     */
+    void checkinByCode(Long userId, Long postId, String code);
 }

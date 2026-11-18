@@ -36,6 +36,18 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     }
 
     @Override
+    public java.util.List<SysAnnouncement> getActiveList() {
+        LambdaQueryWrapper<SysAnnouncement> wrapper = new LambdaQueryWrapper<SysAnnouncement>()
+                .eq(SysAnnouncement::getStatus, SysAnnouncement.STATUS_ON)
+                .and(w -> w.isNull(SysAnnouncement::getExpireTime)
+                        .or().gt(SysAnnouncement::getExpireTime, LocalDateTime.now()))
+                .orderByDesc(SysAnnouncement::getPublishTime)
+                .orderByDesc(SysAnnouncement::getId)
+                .last("LIMIT 5");
+        return announcementMapper.selectList(wrapper);
+    }
+
+    @Override
     public IPage<SysAnnouncement> getList(int page, int size, Integer status) {
         LambdaQueryWrapper<SysAnnouncement> wrapper = new LambdaQueryWrapper<>();
         if (status != null) {

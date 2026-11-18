@@ -11,15 +11,33 @@
         </template>
         发布
       </van-tabbar-item>
-      <van-tabbar-item to="/mine" icon="user-o">我的</van-tabbar-item>
+      <van-tabbar-item to="/mine" icon="user-o" :badge="unreadCount > 0 ? unreadCount : undefined">我的</van-tabbar-item>
     </van-tabbar>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useUserStore } from '@/store/user'
+import request from '@/api/request'
 
 const active = ref(0)
+const userStore = useUserStore()
+const unreadCount = ref(0)
+
+const fetchUnreadBadge = async () => {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await request.get('/api/notification/unread-count', { silent: true })
+    unreadCount.value = res.data?.count || 0
+  } catch (e) {
+    // 静默忽略
+  }
+}
+
+onMounted(() => {
+  fetchUnreadBadge()
+})
 </script>
 
 <style scoped lang="scss">

@@ -75,9 +75,17 @@
       </div>
 
       <!-- 联系方式（缺口#5）：仅发布者与"已通过报名"的参与者可见，方便成行后互相联系 -->
-      <div class="contact-card card" v-if="post.contactVisible && post.publisherContact">
-        <h3 class="section-title">联系方式</h3>
-        <div class="contact-row">
+      <div class="contact-card card" v-if="post.contactVisible && (post.publisherContact || post.checkinCode)">
+        <h3 class="section-title">联系方式与核销</h3>
+        <!-- 发布者专属：4位数字活动签到码 -->
+        <div class="checkin-code-box" v-if="isOwner && post.checkinCode">
+          <div class="code-left">
+            <span class="code-title">活动签到码（向到场伙伴出示）</span>
+            <span class="code-hint">参与者输入此码即可自助完成“已出勤”核销</span>
+          </div>
+          <span class="code-digits">{{ post.checkinCode }}</span>
+        </div>
+        <div class="contact-row" v-if="post.publisherContact">
           <span class="contact-label">发布者 · {{ post.publisherNickname || '匿名' }}</span>
           <a class="contact-value" :href="`tel:${post.publisherContact}`" @click.stop>
             <van-icon name="phone-o" /> {{ post.publisherContact }}
@@ -225,6 +233,14 @@
           <!-- 已加入/已出勤 -->
           <template v-else-if="applyStatus === 'APPROVED' || applyStatus === 'ATTENDED'">
             <van-button disabled round block>{{ applyStatus === 'ATTENDED' ? '已出勤' : '已加入' }}</van-button>
+            <!-- 参与者自助签到码核销入口 -->
+            <van-button
+              v-if="applyStatus === 'APPROVED' && canSelfCheckin"
+              type="primary"
+              round
+              block
+              @click="showCheckinDialog = true"
+            >签到码核销</van-button>
             <!-- 活动进行中/已结束时不给"取消报名"入口（后端同样不允许） -->
             <van-button v-if="applyStatus === 'APPROVED' && canCancelApply" plain type="danger" round block @click="handleCancelApply">取消报名</van-button>
           </template>
@@ -324,6 +340,29 @@
       cancel-text="取消"
       @select="onReportSelect"
     />
+
+    <!-- 参与者自助签到码核销弹窗 -->
+    <van-dialog
+      v-model:show="showCheckinDialog"
+      title="活动签到核销"
+      show-cancel-button
+      confirm-button-text="确认签到"
+      :before-close="onCheckinConfirm"
+    >
+      <div style="padding: 16px 20px">
+        <p style="font-size: 12px; color: #6b7280; margin-bottom: 10px">
+          请向局主询问 4 位数字活动签到码，签到后状态变更为“已出勤”，活动结束后即可互评。
+        </p>
+        <van-field
+          v-model="inputCheckinCode"
+          maxlength="4"
+          type="digit"
+          placeholder="请输入4位数字签到码"
+          input-align="center"
+          style="background: #f3f4f6; border-radius: 10px; font-size: 18px; letter-spacing: 4px"
+        />
+      </div>
+    </van-dialog>
   </div>
 </template>
 
@@ -332,7 +371,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog, showDialog } from 'vant'
 import { getPostDetail, addComment, getComments, cancelPost } from '@/api/post'
-import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
+import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejectApply, markAttendance, checkinByCode } from '@/api/apply'
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
 import { submitReport } from '@/api/report'
 import { getMyTags } from '@/api/user'
@@ -411,6 +450,36 @@ const isOwner = computed(() => {
 const canMarkAttendance = computed(() => {
   return post.value?.status === 'ONGOING' || post.value?.status === 'FINISHED'
 })
+
+// 参与者自助签到码状态与可见性
+const showCheckinDialog = ref(false)
+const inputCheckinCode = ref('')
+const canSelfCheckin = computed(() => {
+  const s = post.value?.status
+  return s === 'ONGOING' || s === 'FINISHED' || s === 'RECRUITING' || s === 'FULL'
+})
+
+const onCheckinConfirm = async (action) => {
+  if (action !== 'confirm') {
+    inputCheckinCode.value = ''
+    return true
+  }
+  const code = inputCheckinCode.value.trim()
+  if (!/^\d{4}$/.test(code)) {
+    showToast('请输入4位数字签到码')
+    return false
+  }
+  try {
+    await checkinByCode(Number(postId), code)
+    showToast('签到成功，已标记为出勤！')
+    inputCheckinCode.value = ''
+    await fetchDetail()
+    return true
+  } catch (err) {
+    showToast(err.message || '签到码错误或不在签到时段')
+    return false
+  }
+}
 
 // 当前用户的报名状态
 const applyStatus = computed(() => {
@@ -1020,6 +1089,45 @@ onMounted(loadAll)
 
 // 联系方式卡片（缺口#5）
 .contact-card {
+  .checkin-code-box {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    border: 1px solid rgba(16, 163, 127, 0.2);
+
+    .code-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+
+      .code-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #065f46;
+      }
+
+      .code-hint {
+        font-size: 11px;
+        color: #047857;
+      }
+    }
+
+    .code-digits {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--primary-dark);
+      background: #fff;
+      padding: 4px 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(16, 163, 127, 0.15);
+    }
+  }
+
   .contact-row {
     display: flex;
     justify-content: space-between;

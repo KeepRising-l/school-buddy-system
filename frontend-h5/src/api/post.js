@@ -6,6 +6,7 @@ export const createPost = (data) => request.post('/api/post/create', data, { sil
 export const getPostDetail = (id) => request.get(`/api/post/detail/${id}`)
 export const cancelPost = (id) => request.post(`/api/post/cancel/${id}`)
 export const getSquareList = (params) => request.get('/api/square/list', { params })
+export const getFeaturedPosts = (limit = 5) => request.get('/api/square/featured', { params: { limit }, silent: true })
 // 评论发送失败由页面用 Dialog 展示具体原因（如"该组局已取消，暂不可评论"），故标记 silent 跳过拦截器的 toast，
 // 避免"toast + 弹窗"重复提示
 export const addComment = (data) => request.post('/api/post/comment', data, { silent: true })

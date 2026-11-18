@@ -47,6 +47,11 @@ public class PostDetailVO extends PostVO {
     private Boolean contactVisible;
 
     /**
+     * 4位数字活动签到码（仅当查看者为发布者本人时返回，供线下向参与者出示以自助核销出勤）
+     */
+    private String checkinCode;
+
+    /**
      * 已报名用户信息
      */
     @Data

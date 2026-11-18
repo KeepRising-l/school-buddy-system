@@ -14,6 +14,12 @@
       <van-tag v-if="post.tagName" plain size="medium" round>{{ post.tagName }}</van-tag>
       <!-- 段位要求徽章：提前告知门槛，避免点进详情才发现不达标 -->
       <van-tag v-if="requireLevelText" type="warning" plain size="medium" round>{{ requireLevelText }}</van-tag>
+      <!-- 可解释推荐理由徽章 -->
+      <span
+        v-for="reason in (post.recommendReasons || [])"
+        :key="reason"
+        class="recommend-reason-pill"
+      >✨ {{ reason }}</span>
     </div>
 
     <!-- 信息行 -->
@@ -132,8 +138,20 @@ const formatTime = (time) => {
   .post-tags {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
     margin-bottom: 10px;
+
+    .recommend-reason-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #0d8a6a;
+      background: linear-gradient(90deg, rgba(16, 163, 127, 0.12), rgba(52, 211, 153, 0.16));
+    }
   }
 
   .post-info {

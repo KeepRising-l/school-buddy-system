@@ -66,4 +66,9 @@ public interface UserService {
      * 设置主页隐私：0公开 1隐藏历史组局
      */
     void setProfilePrivacy(Long userId, Integer privacy);
+
+    /**
+     * 修改密码（校验旧密码后更新为新密码）
+     */
+    void updatePassword(Long userId, String oldPassword, String newPassword);
 }

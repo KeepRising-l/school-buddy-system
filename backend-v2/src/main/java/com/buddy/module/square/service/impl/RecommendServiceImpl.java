@@ -99,11 +99,115 @@ public class RecommendServiceImpl implements RecommendService {
             voList = new ArrayList<>();
         } else {
             voList = postConverter.toVOList(allPosts.subList(fromIndex, toIndex));
+            fillRecommendReasons(voList, userId);
         }
 
         Page<PostVO> result = new Page<>(page, size, total);
         result.setRecords(voList);
         return result;
+    }
+
+    @Override
+    public List<PostVO> getFeaturedList(Long userId, int limit) {
+        String cacheKey = buildCacheKey(userId, null, null, null);
+        List<Post> allPosts = cache.get(cacheKey);
+        if (allPosts == null) {
+            allPosts = queryAndScorePosts(userId, null, null, null);
+            cache.put(cacheKey, allPosts);
+        }
+        if (allPosts.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // 优先挑选仍在招募中（RECRUITING）且非本人发布的组局
+        List<Post> candidates = allPosts.stream()
+                .filter(p -> PostStatus.RECRUITING.equals(p.getStatus()))
+                .filter(p -> userId == null || !userId.equals(p.getPublisherId()))
+                .limit(limit)
+                .collect(Collectors.toList());
+        if (candidates.isEmpty()) {
+            candidates = allPosts.stream().limit(limit).collect(Collectors.toList());
+        }
+        List<PostVO> voList = postConverter.toVOList(candidates);
+        fillRecommendReasons(voList, userId);
+        return voList;
+    }
+
+    /**
+     * 为推荐列表填充可解释推荐理由胶囊与契合度分数
+     */
+    private void fillRecommendReasons(List<PostVO> voList, Long userId) {
+        if (voList == null || voList.isEmpty()) {
+            return;
+        }
+        Set<Long> userTagIds = new HashSet<>();
+        if (userId != null) {
+            List<UserTag> userTags = userTagMapper.selectList(
+                    new LambdaQueryWrapper<UserTag>().eq(UserTag::getUserId, userId)
+            );
+            if (userTags != null) {
+                for (UserTag ut : userTags) {
+                    if (ut.getTagId() != null) {
+                        userTagIds.add(ut.getTagId());
+                    }
+                }
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (PostVO vo : voList) {
+            if (vo == null) continue;
+            List<String> reasons = new ArrayList<>();
+            int baseMatch = 68;
+
+            // 1. 兴趣标签契合
+            boolean tagMatched = false;
+            if (!userTagIds.isEmpty() && StrUtil.isNotBlank(vo.getTagIds())) {
+                for (String idStr : vo.getTagIds().split(",")) {
+                    try {
+                        if (userTagIds.contains(Long.parseLong(idStr.trim()))) {
+                            tagMatched = true;
+                            break;
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+            if (tagMatched) {
+                String tagDisplay = StrUtil.isNotBlank(vo.getTagName()) ? vo.getTagName().split(",")[0] : vo.getCategory();
+                reasons.add("契合你的" + (StrUtil.isNotBlank(tagDisplay) ? tagDisplay : "兴趣"));
+                baseMatch += 18;
+            }
+
+            // 2. 即将开局（12小时内开始）
+            if (vo.getStartTime() != null) {
+                long hours = ChronoUnit.HOURS.between(now, vo.getStartTime());
+                if (hours >= 0 && hours <= 12) {
+                    reasons.add(hours <= 2 ? "即将开局" : "今日开局");
+                    baseMatch += 6;
+                }
+            }
+
+            // 3. 差1人满员
+            if (vo.getMaxPeople() != null && vo.getCurrentPeople() != null
+                    && vo.getMaxPeople() - vo.getCurrentPeople() == 1
+                    && PostStatus.RECRUITING.equals(vo.getStatus())) {
+                reasons.add("差1人成局");
+                baseMatch += 4;
+            }
+
+            // 4. 高信誉发布者
+            if (vo.getPublisherCreditLevel() != null && vo.getPublisherCreditLevel() >= 5) {
+                reasons.add("靠谱局主");
+                baseMatch += 3;
+            }
+
+            if (reasons.isEmpty()) {
+                reasons.add("热门招募");
+            }
+            // 最多展示 2 个胶囊，保持卡片清爽
+            vo.setRecommendReasons(reasons.size() > 2 ? reasons.subList(0, 2) : reasons);
+            vo.setMatchScore(Math.min(99, baseMatch));
+        }
     }
 
     /**
