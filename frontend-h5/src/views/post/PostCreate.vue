@@ -4,6 +4,40 @@
     <van-nav-bar title="发布组局" left-arrow @click-left="router.back()" />
 
     <div class="content">
+      <!-- AI 一键智能成局卡片（Phase 3 AI-Native 升级） -->
+      <div class="ai-composer-card">
+        <div class="ai-header">
+          <span class="ai-badge">✨ AI 智能成局</span>
+          <span class="ai-sub">输入一句话，自动识别项目、时间、地点与人数</span>
+        </div>
+        <van-field
+          v-model="aiPrompt"
+          type="textarea"
+          rows="2"
+          autosize
+          maxlength="200"
+          placeholder="例如：明晚7点到9点南区体育馆约3个人打羽毛球，要求熟手以上"
+          class="ai-input"
+        />
+        <div class="ai-Quick-row">
+          <span class="quick-chip" @click="useAiExample('明晚7点到9点南区体育馆约3人打羽毛球，熟手以上')">🏀 明晚羽毛球</span>
+          <span class="quick-chip" @click="useAiExample('今晚8点线上王者荣耀五排上分，要求高手以上')">🎮 王者五排</span>
+          <span class="quick-chip" @click="useAiExample('周六下午2点到6点活动中心拼6人剧本杀，萌新友好')">🎲 周末剧本杀</span>
+        </div>
+        <van-button
+          size="small"
+          type="primary"
+          round
+          block
+          :loading="aiParsing"
+          loading-text="AI 正在解析并生成文案..."
+          class="ai-parse-btn"
+          @click="handleAiParse"
+        >
+          ✨ 一键智能填表
+        </van-button>
+      </div>
+
       <!-- 标题 -->
       <van-field
         v-model="form.title"
@@ -162,11 +196,15 @@
       </van-field>
 
       <!-- 详细描述 -->
+      <div class="desc-header-bar">
+        <span class="desc-tip">活动详情描述</span>
+        <span class="ai-polish-btn" @click="handleAiPolish">✨ AI 帮写/润色</span>
+      </div>
       <van-field
         v-model="form.description"
         label="详细描述"
         type="textarea"
-        placeholder="请描述活动详情（最多500字）"
+        placeholder="请描述活动详情（最多500字，可点击上方 AI 帮写）"
         maxlength="500"
         show-word-limit
         rows="4"
@@ -196,9 +234,76 @@ import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
 import { createPost } from '@/api/post'
 import { getAllTags } from '@/api/tag'
+import { parsePostByAi, polishDescByAi } from '@/api/ai'
 
 const router = useRouter()
 const loading = ref(false)
+const aiPrompt = ref('')
+const aiParsing = ref(false)
+
+const useAiExample = (example) => {
+  aiPrompt.value = example
+}
+
+// AI 一键解析自然语言并自动填充全部表单项
+const handleAiParse = async () => {
+  if (!aiPrompt.value.trim()) {
+    showToast('请先输入一句话组局描述，或点击上方示例')
+    return
+  }
+  if (aiParsing.value) return
+  aiParsing.value = true
+  try {
+    const res = await parsePostByAi(aiPrompt.value.trim())
+    const d = res.data || {}
+    if (d.title) form.title = d.title
+    if (d.category) form.category = d.category
+    if (d.tagId) {
+      form.tagIds = String(d.tagId)
+      selectedTagName.value = d.tagName || ''
+    } else if (d.category && tagData.value.length > 0) {
+      const fallbackTag = tagData.value.find(t => t.category === d.category)
+      if (fallbackTag) {
+        form.tagIds = String(fallbackTag.id)
+        selectedTagName.value = fallbackTag.name
+      }
+    }
+    selectedTagHasLevel.value = d.hasLevel !== false
+    if (d.startTime) form.startTime = d.startTime
+    if (d.endTime) form.endTime = d.endTime
+    if (d.location) form.location = d.location
+    if (d.maxPeople) form.maxPeople = d.maxPeople
+    form.requireLevel = selectedTagHasLevel.value ? (d.requireLevel ?? null) : null
+    form.requireGender = d.requireGender ?? 0
+    if (d.description) form.description = d.description
+    showToast('✨ AI 已为你自动填好表单，确认无误即可发布！')
+  } catch (err) {
+    // 拦截器已提示
+  } finally {
+    aiParsing.value = false
+  }
+}
+
+// AI 帮写/润色描述
+const handleAiPolish = async () => {
+  try {
+    const res = await polishDescByAi({
+      category: form.category || '校园组局',
+      tagName: selectedTagName.value || form.category || '搭子活动',
+      location: form.location || '校内约定地点',
+      startTime: form.startTime ? form.startTime.substring(0, 16) : '近期',
+      maxPeople: form.maxPeople,
+      requireLevel: selectedTagHasLevel.value ? form.requireLevel : 0,
+      description: form.description
+    })
+    if (res.data?.description) {
+      form.description = res.data.description
+      showToast('✨ 已生成招募文案')
+    }
+  } catch (err) {
+    // 拦截器已提示
+  }
+}
 
 // 发布失败一律用弹窗说明原因：
 // toast 只停 3.5 秒且不阻断操作，规则类提示（如"开始时间晚于结束时间"）文案长，用户经常读不完就没了，
@@ -555,6 +660,86 @@ onMounted(() => {
 
 .content {
   padding: 12px 16px 32px;
+}
+
+.ai-composer-card {
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #ecfdf5 0%, #ffffff 65%);
+  border: 1px solid rgba(16, 163, 127, 0.25);
+  box-shadow: 0 10px 24px -14px rgba(16, 163, 127, 0.28);
+
+  .ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+
+    .ai-badge {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary-dark);
+    }
+
+    .ai-sub {
+      font-size: 11px;
+      color: var(--text-hint);
+    }
+  }
+
+  .ai-input {
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(16, 163, 127, 0.18);
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+
+  .ai-Quick-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+
+    .quick-chip {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-light);
+      cursor: pointer;
+    }
+  }
+
+  .ai-parse-btn {
+    background: var(--primary);
+    border: none;
+    font-weight: 600;
+  }
+}
+
+.desc-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px 4px;
+
+  .desc-tip {
+    font-size: 12px;
+    color: var(--text-hint);
+  }
+
+  .ai-polish-btn {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+  }
 }
 
 .form-field {

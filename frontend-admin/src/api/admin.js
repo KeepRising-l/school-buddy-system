@@ -44,6 +44,7 @@ export const getReportStats = (params) => request.get('/api/admin/stats/reports'
 export const getReportList = (params) => request.get('/api/admin/report/list', { params })
 export const getReportDetail = (id) => request.get(`/api/admin/report/detail/${id}`)
 export const handleReport = (id, data) => request.post(`/api/admin/report/handle/${id}`, data)
+export const getReportAiAdvice = (id) => request.get(`/api/admin/report/ai-advice/${id}`)
 
 // ===== 系统公告 =====
 export const getAnnouncementList = (params) => request.get('/api/admin/announcement/list', { params })

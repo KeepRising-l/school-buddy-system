@@ -83,10 +83,32 @@
           <el-descriptions-item label="处理备注" :span="2">{{ detail.handleRemark || '无' }}</el-descriptions-item>
         </template>
       </el-descriptions>
+
+      <!-- AI 风险研判建议卡片 -->
+      <div v-if="aiAdvice" class="ai-advice-box" style="margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px">
+          <span style="font-weight: 600; color: #065f46">🤖 AI 风控研判建议</span>
+          <el-tag :type="aiAdvice.riskLevel === 'HIGH' ? 'danger' : (aiAdvice.riskLevel === 'MEDIUM' ? 'warning' : 'success')" size="small">
+            风险分 {{ aiAdvice.riskScore }} ({{ aiAdvice.riskLevel }})
+          </el-tag>
+        </div>
+        <div style="font-size: 13px; color: #1f2937; margin-bottom: 6px">{{ aiAdvice.summary }}</div>
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #4b5563">
+          <li v-for="(ev, idx) in (aiAdvice.evidences || [])" :key="idx">{{ ev }}</li>
+        </ul>
+      </div>
     </el-dialog>
 
     <!-- 处理弹窗 -->
-    <el-dialog v-model="processVisible" title="处理举报" width="480px">
+    <el-dialog v-model="processVisible" title="处理举报" width="520px">
+      <!-- AI 辅助决策提示 -->
+      <div v-if="aiAdvice" style="margin-bottom: 14px; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+          <span style="font-size: 13px; font-weight: 600; color: #0f766e">🤖 AI 研判建议（风险分 {{ aiAdvice.riskScore }}）</span>
+          <el-button size="small" type="primary" link @click="applyAiAdvice">一键采纳建议</el-button>
+        </div>
+        <div style="font-size: 12px; color: #475569">{{ aiAdvice.summary }}</div>
+      </div>
       <el-form label-width="80px">
         <el-form-item label="判定结果">
           <el-radio-group v-model="processForm.valid">
@@ -116,17 +138,35 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getReportList, getReportDetail, handleReport } from '@/api/admin'
+import { getReportList, getReportDetail, handleReport, getReportAiAdvice } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const tableData = ref([])
 const detailVisible = ref(false)
 const detail = ref(null)
+const aiAdvice = ref(null)
 const processVisible = ref(false)
 const processForm = reactive({ valid: true, remark: '' })
 const processing = ref(false)
 const currentRow = ref(null)
+
+const loadAiAdvice = async (reportId) => {
+  aiAdvice.value = null
+  try {
+    const res = await getReportAiAdvice(reportId)
+    aiAdvice.value = res.data || null
+  } catch (e) {
+    // 忽略 AI 建议加载失败
+  }
+}
+
+const applyAiAdvice = () => {
+  if (!aiAdvice.value) return
+  processForm.valid = !!aiAdvice.value.suggestedValid
+  processForm.remark = aiAdvice.value.suggestedRemark || ''
+  ElMessage.success('已填充 AI 建议')
+}
 
 const searchForm = reactive({
   status: undefined
@@ -187,6 +227,7 @@ const handleDetail = async (row) => {
     const res = await getReportDetail(row.id)
     detail.value = res.data
     detailVisible.value = true
+    loadAiAdvice(row.id)
   } catch (e) {
     // 错误已在拦截器中处理
   }
@@ -197,6 +238,7 @@ const handleProcess = (row) => {
   processForm.valid = true
   processForm.remark = ''
   processVisible.value = true
+  loadAiAdvice(row.id)
 }
 
 const handleSubmitProcess = async () => {

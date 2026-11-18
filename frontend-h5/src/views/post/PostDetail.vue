@@ -97,6 +97,19 @@
             <van-icon name="phone-o" /> {{ u.contact }}
           </a>
         </div>
+        <!-- AI 成局破冰小秘书（Phase 3 AI-Native） -->
+        <div class="ai-icebreaker-box" v-if="icebreaker">
+          <div class="ice-header">
+            <span class="ice-title">💡 AI 成局破冰小秘书</span>
+            <span class="ice-copy" @click.stop="copyGreeting">复制打招呼语</span>
+          </div>
+          <ul class="ice-topics">
+            <li v-for="(topic, idx) in (icebreaker.commonTopics || [])" :key="idx">{{ topic }}</li>
+          </ul>
+          <div class="ice-greeting" v-if="icebreaker.greetingTemplate" @click.stop="copyGreeting">
+            “{{ icebreaker.greetingTemplate }}”
+          </div>
+        </div>
         <p class="contact-tip">联系方式仅本组局成员可见，请勿外传</p>
       </div>
       <!-- 未解锁提示：报名通过后才可见 -->
@@ -375,6 +388,7 @@ import { applyJoin, waitlistJoin, cancelApply, getApplyList, approveApply, rejec
 import { getFavoriteStatus, addFavorite, cancelFavorite } from '@/api/favorite'
 import { submitReport } from '@/api/report'
 import { getMyTags } from '@/api/user'
+import { getIcebreaker } from '@/api/ai'
 import { useUserStore } from '@/store/user'
 import CreditStar from '@/components/CreditStar.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -632,6 +646,36 @@ const formatTime = (time) => {
 }
 
 // 加载帖子详情
+const icebreaker = ref(null)
+
+const fetchIcebreakerInfo = async () => {
+  if (!userStore.isLoggedIn || !post.value?.contactVisible) {
+    icebreaker.value = null
+    return
+  }
+  try {
+    const res = await getIcebreaker(postId)
+    icebreaker.value = res.data || null
+  } catch (e) {
+    // 静默忽略
+  }
+}
+
+const copyGreeting = async () => {
+  const text = icebreaker.value?.greetingTemplate
+  if (!text) return
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      showToast('已复制打招呼话术，快去联系搭子吧！')
+    } else {
+      showDialog({ title: '打招呼话术', message: text })
+    }
+  } catch (e) {
+    showDialog({ title: '打招呼话术', message: text })
+  }
+}
+
 const fetchDetail = async () => {
   const seq = ++detailSeq
   loadError.value = false
@@ -639,6 +683,9 @@ const fetchDetail = async () => {
     const res = await getPostDetail(postId)
     if (seq !== detailSeq) return // 已有更新的请求，丢弃过期响应
     post.value = res.data
+    if (post.value?.contactVisible) {
+      fetchIcebreakerInfo()
+    }
   } catch (err) {
     if (seq !== detailSeq) return
     // 修复：失败显示错误态+重试按钮，而不是永远"加载中"
@@ -1160,6 +1207,56 @@ onMounted(loadAll)
     margin-top: 8px;
     font-size: 11px;
     color: var(--text-hint);
+  }
+
+  .ai-icebreaker-box {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px dashed rgba(16, 163, 127, 0.35);
+
+    .ice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+
+      .ice-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--primary-dark);
+      }
+
+      .ice-copy {
+        font-size: 11px;
+        color: var(--primary);
+        font-weight: 600;
+        cursor: pointer;
+      }
+    }
+
+    .ice-topics {
+      margin: 0 0 6px;
+      padding-left: 4px;
+      list-style: none;
+
+      li {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+    }
+
+    .ice-greeting {
+      font-size: 12px;
+      color: #4b5563;
+      background: #fff;
+      padding: 6px 8px;
+      border-radius: 8px;
+      line-height: 1.5;
+      cursor: pointer;
+    }
   }
 
   .contact-locked {
