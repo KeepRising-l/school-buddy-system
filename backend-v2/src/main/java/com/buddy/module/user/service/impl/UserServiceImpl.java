@@ -77,6 +77,9 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private CreditService creditService;
 
+    @Autowired(required = false)
+    private com.buddy.module.post.converter.PostConverter postConverter;
+
     @Autowired
     private JwtUtils jwtUtils;
 
@@ -354,11 +357,15 @@ public class UserServiceImpl implements UserService {
 
         IPage<Post> postPage = postMapper.selectPage(new Page<>(page, size), wrapper);
 
-        // 转换为PostVO
+        // 转换为PostVO（优先使用批量 PostConverter，消除 N+1）
         IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
-        voPage.setRecords(postPage.getRecords().stream()
-                .map(this::convertToPostVO)
-                .collect(Collectors.toList()));
+        if (postConverter != null) {
+            voPage.setRecords(postConverter.toVOList(postPage.getRecords()));
+        } else {
+            voPage.setRecords(postPage.getRecords().stream()
+                    .map(this::convertToPostVO)
+                    .collect(Collectors.toList()));
+        }
         return voPage;
     }
 
@@ -373,10 +380,34 @@ public class UserServiceImpl implements UserService {
         }
 
         IPage<PostApply> applyPage = postApplyMapper.selectPage(new Page<>(page, size), wrapper);
+        List<PostApply> records = applyPage.getRecords();
+        IPage<ApplyVO> voPage = new Page<>(applyPage.getCurrent(), applyPage.getSize(), applyPage.getTotal());
+        if (records == null || records.isEmpty()) {
+            voPage.setRecords(new ArrayList<>());
+            return voPage;
+        }
+
+        // 批量查询帖子标题（消除 N+1）
+        Set<Long> postIds = new HashSet<>();
+        for (PostApply apply : records) {
+            if (apply.getPostId() != null) {
+                postIds.add(apply.getPostId());
+            }
+        }
+        Map<Long, Post> postMap = new java.util.HashMap<>();
+        if (!postIds.isEmpty()) {
+            List<Post> posts = postMapper.selectBatchIds(postIds);
+            if (posts != null) {
+                for (Post p : posts) {
+                    if (p != null && p.getId() != null) {
+                        postMap.put(p.getId(), p);
+                    }
+                }
+            }
+        }
 
         // 转换为ApplyVO
-        IPage<ApplyVO> voPage = new Page<>(applyPage.getCurrent(), applyPage.getSize(), applyPage.getTotal());
-        voPage.setRecords(applyPage.getRecords().stream().map(apply -> {
+        voPage.setRecords(records.stream().map(apply -> {
             ApplyVO vo = new ApplyVO();
             vo.setId(apply.getId());
             vo.setPostId(apply.getPostId());
@@ -386,8 +417,7 @@ public class UserServiceImpl implements UserService {
             vo.setHandleTime(apply.getHandleTime());
             vo.setRemark(apply.getRemark());
 
-            // 查询帖子标题
-            Post post = postMapper.selectById(apply.getPostId());
+            Post post = postMap.get(apply.getPostId());
             if (post != null) {
                 vo.setPostTitle(post.getTitle());
             }
@@ -422,13 +452,15 @@ public class UserServiceImpl implements UserService {
         // 兴趣标签（含段位）
         vo.setTags(getUserTags(userId));
 
-        // 评价标签云统计
+        // 评价标签云统计（展开逗号分隔的全部多选标签，修复只取第一个标签导致后续标签丢失的问题）
         List<Review> reviews = reviewMapper.selectList(
                 new LambdaQueryWrapper<Review>().eq(Review::getTargetUserId, userId)
         );
         Map<String, Long> tagCounts = reviews.stream()
                 .filter(r -> r.getTag() != null && !r.getTag().isEmpty())
-                .map(r -> r.getTag().split(",")[0].trim())
+                .flatMap(r -> java.util.Arrays.stream(r.getTag().split(",")))
+                .map(String::trim)
+                .filter(t -> !t.isEmpty())
                 .collect(Collectors.groupingBy(t -> t, Collectors.counting()));
         List<UserProfileVO.TagStat> tagStats = tagCounts.entrySet().stream()
                 .map(e -> {
@@ -442,14 +474,12 @@ public class UserServiceImpl implements UserService {
 
         // 历史组局（发布 + 参加，最多20条；隐私隐藏时不返回）
         if (vo.getProfilePrivacy() != 1) {
-            List<PostVO> historyPosts = new ArrayList<>();
             List<Post> published = postMapper.selectList(
                     new LambdaQueryWrapper<Post>()
                             .eq(Post::getPublisherId, userId)
                             .orderByDesc(Post::getCreatedTime)
                             .last("LIMIT 20")
             );
-            historyPosts.addAll(published.stream().map(this::convertToPostVO).collect(Collectors.toList()));
             // 参加过的组局（APPROVED/ATTENDED/NOSHOW 等已加入的）
             List<PostApply> joinedApplies = postApplyMapper.selectList(
                     new LambdaQueryWrapper<PostApply>()
@@ -459,29 +489,86 @@ public class UserServiceImpl implements UserService {
                             .last("LIMIT 20")
             );
             Set<Long> publishedIds = published.stream().map(Post::getId).collect(Collectors.toSet());
+            Set<Long> extraPostIds = new HashSet<>();
             for (PostApply apply : joinedApplies) {
-                if (publishedIds.contains(apply.getPostId())) {
-                    continue; // 已包含的发布帖不重复
-                }
-                Post joined = postMapper.selectById(apply.getPostId());
-                if (joined != null) {
-                    historyPosts.add(convertToPostVO(joined));
+                if (apply.getPostId() != null && !publishedIds.contains(apply.getPostId())) {
+                    extraPostIds.add(apply.getPostId());
                 }
             }
-            // 按创建时间倒序取前20
-            historyPosts.sort((a, b) -> {
+            List<Post> allHistoryPosts = new ArrayList<>(published);
+            if (!extraPostIds.isEmpty()) {
+                List<Post> joinedPosts = postMapper.selectBatchIds(extraPostIds);
+                if (joinedPosts != null) {
+                    allHistoryPosts.addAll(joinedPosts);
+                }
+            }
+            // 按创建时间倒序取前20并批量转 VO（消除 N+1）
+            allHistoryPosts.sort((a, b) -> {
                 if (a.getCreatedTime() == null || b.getCreatedTime() == null) return 0;
                 return b.getCreatedTime().compareTo(a.getCreatedTime());
             });
-            vo.setHistoryPosts(historyPosts.stream().limit(20).collect(Collectors.toList()));
+            List<Post> top20Posts = allHistoryPosts.stream().limit(20).collect(Collectors.toList());
+            if (postConverter != null) {
+                vo.setHistoryPosts(postConverter.toVOList(top20Posts));
+            } else {
+                vo.setHistoryPosts(top20Posts.stream().map(this::convertToPostVO).collect(Collectors.toList()));
+            }
         }
 
-        // 收到的评价（最多10条）
-        List<ReviewVO> reviewVOs = reviews.stream()
-                .sorted((a, b) -> b.getCreatedTime().compareTo(a.getCreatedTime()))
+        // 收到的评价（最多10条，批量查询评价人与帖子标题，消除 N+1）
+        List<Review> recent10 = reviews.stream()
+                .sorted((a, b) -> {
+                    if (a.getCreatedTime() == null || b.getCreatedTime() == null) return 0;
+                    return b.getCreatedTime().compareTo(a.getCreatedTime());
+                })
                 .limit(10)
-                .map(this::convertToReviewVO)
                 .collect(Collectors.toList());
+        Set<Long> reviewerIds = new HashSet<>();
+        Set<Long> reviewPostIds = new HashSet<>();
+        for (Review r : recent10) {
+            if (r.getReviewerId() != null) reviewerIds.add(r.getReviewerId());
+            if (r.getPostId() != null) reviewPostIds.add(r.getPostId());
+        }
+        Map<Long, User> reviewerMap = new java.util.HashMap<>();
+        if (!reviewerIds.isEmpty()) {
+            List<User> reviewers = userMapper.selectBatchIds(reviewerIds);
+            if (reviewers != null) {
+                for (User u : reviewers) {
+                    if (u != null && u.getId() != null) reviewerMap.put(u.getId(), u);
+                }
+            }
+        }
+        Map<Long, Post> reviewPostMap = new java.util.HashMap<>();
+        if (!reviewPostIds.isEmpty()) {
+            List<Post> rPosts = postMapper.selectBatchIds(reviewPostIds);
+            if (rPosts != null) {
+                for (Post p : rPosts) {
+                    if (p != null && p.getId() != null) reviewPostMap.put(p.getId(), p);
+                }
+            }
+        }
+        List<ReviewVO> reviewVOs = recent10.stream().map(r -> {
+            ReviewVO rvo = new ReviewVO();
+            rvo.setId(r.getId());
+            rvo.setPostId(r.getPostId());
+            rvo.setReviewerId(r.getReviewerId());
+            rvo.setTargetUserId(r.getTargetUserId());
+            rvo.setRating(r.getRating());
+            rvo.setTag(r.getTag());
+            rvo.setContent(r.getContent());
+            rvo.setReplyContent(r.getReplyContent());
+            rvo.setReplyTime(r.getReplyTime());
+            rvo.setCreatedTime(r.getCreatedTime());
+            User reviewer = reviewerMap.get(r.getReviewerId());
+            if (reviewer != null) {
+                rvo.setReviewerNickname(reviewer.getNickname());
+            }
+            Post rPost = reviewPostMap.get(r.getPostId());
+            if (rPost != null) {
+                rvo.setPostTitle(rPost.getTitle());
+            }
+            return rvo;
+        }).collect(Collectors.toList());
         vo.setRecentReviews(reviewVOs);
 
         return vo;

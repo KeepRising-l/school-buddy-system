@@ -52,6 +52,11 @@ public class FavoriteServiceImpl implements FavoriteService {
         if (count > 0) {
             throw new BusinessException("已收藏该组局");
         }
+        // 优先恢复曾取消收藏（deleted=1）的记录，规避 uk_user_post 唯一索引冲突
+        int restored = favoriteMapper.restoreDeleted(userId, postId);
+        if (restored > 0) {
+            return;
+        }
         Favorite favorite = new Favorite();
         favorite.setUserId(userId);
         favorite.setPostId(postId);
@@ -70,30 +75,16 @@ public class FavoriteServiceImpl implements FavoriteService {
 
     @Override
     public IPage<PostVO> getMyFavorites(Long userId, int page, int size) {
-        IPage<Favorite> favoritePage = favoriteMapper.selectPage(
-                new Page<>(page, size),
-                new LambdaQueryWrapper<Favorite>()
-                        .eq(Favorite::getUserId, userId)
-                        .orderByDesc(Favorite::getCreatedTime)
-        );
-
-        List<Long> postIds = favoritePage.getRecords().stream()
-                .map(Favorite::getPostId)
-                .collect(Collectors.toList());
-
-        IPage<PostVO> voPage = new Page<>(favoritePage.getCurrent(), favoritePage.getSize(), favoritePage.getTotal());
-        if (postIds.isEmpty()) {
-            voPage.setRecords(new ArrayList<>());
-            return voPage;
+        // SQL 层关联分页查询（过滤已下架/已删除帖子，保留已取消帖子以便用户识别并清理收藏），
+        // 保证返回记录数与分页总数严格一致，避免内存过滤导致前端提前终止翻页
+        IPage<Post> postPage = favoriteMapper.selectFavoritePostsPage(new Page<>(page, size), userId);
+        if (postPage == null || postPage.getRecords() == null || postPage.getRecords().isEmpty()) {
+            Page<PostVO> emptyPage = new Page<>(page, size, 0);
+            emptyPage.setRecords(new ArrayList<>());
+            return emptyPage;
         }
-
-        // 批量查询帖子（避免N+1），并过滤下架/已取消的（避免收藏列表出现幽灵数据）
-        List<Post> posts = postMapper.selectBatchIds(postIds).stream()
-                .filter(p -> p != null
-                        && p.getIsAuditPass() != null && p.getIsAuditPass() == 1
-                        && !"CANCELLED".equals(p.getStatus()))
-                .collect(Collectors.toList());
-        voPage.setRecords(postConverter.toVOList(posts));
+        IPage<PostVO> voPage = new Page<>(postPage.getCurrent(), postPage.getSize(), postPage.getTotal());
+        voPage.setRecords(postConverter.toVOList(postPage.getRecords()));
         return voPage;
     }
 

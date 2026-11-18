@@ -1,6 +1,7 @@
 package com.buddy.module.post.task;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.constant.PostStatus;
 import com.buddy.module.post.entity.Post;
 import com.buddy.module.post.mapper.PostMapper;
@@ -23,6 +24,9 @@ public class PostStatusTask {
     @Autowired
     private PostMapper postMapper;
 
+    @Autowired(required = false)
+    private CacheEpoch cacheEpoch;
+
     /**
      * 每5分钟执行：检查到达start_time的帖子 -> RECRUITING/FULL -> ONGOING
      */
@@ -37,6 +41,9 @@ public class PostStatusTask {
                 .set(Post::getStatus, PostStatus.ONGOING);
         int count = postMapper.update(null, wrapper);
         if (count > 0) {
+            if (cacheEpoch != null) {
+                cacheEpoch.bump();
+            }
             log.info("已将 {} 条帖子状态更新为 ONGOING", count);
         }
     }
@@ -53,6 +60,9 @@ public class PostStatusTask {
                 .set(Post::getStatus, PostStatus.FINISHED);
         int count = postMapper.update(null, wrapper);
         if (count > 0) {
+            if (cacheEpoch != null) {
+                cacheEpoch.bump();
+            }
             log.info("已将 {} 条帖子状态更新为 FINISHED", count);
         }
     }

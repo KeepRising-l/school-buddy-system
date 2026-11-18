@@ -69,9 +69,14 @@ const statusType = (s) => statusMap[s]?.type || 'default'
 const loadMore = async () => {
   try {
     const res = await getMyFavorites({ page: page.value, size })
-    const list = res.data?.records || []
+    const data = res.data || {}
+    const list = data.records || []
     favoriteList.value = page.value === 1 ? list : [...favoriteList.value, ...list]
-    finished.value = (res.data?.records?.length || 0) < size
+    if (data.pages != null) {
+      finished.value = page.value >= data.pages || list.length === 0
+    } else {
+      finished.value = list.length < size
+    }
     page.value++
   } catch (e) {
     // 修复：失败不置 finished，允许重试

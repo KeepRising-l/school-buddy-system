@@ -62,9 +62,9 @@
                 <UserAvatar :name="item.applicantNickname" :avatar="item.applicantAvatar" :size="32" />
                 <span class="applicant-name">{{ item.applicantNickname || '用户' }}</span>
               </div>
-              <van-tag type="primary" size="medium" v-if="item.status === 'PENDING'">待审核</van-tag>
-              <van-tag type="success" size="medium" v-else-if="item.status === 'APPROVED'">已同意</van-tag>
-              <van-tag type="danger" size="medium" v-else-if="item.status === 'REJECTED'">已拒绝</van-tag>
+              <van-tag :type="applyStatusType(item.status)" size="medium">
+                {{ applyStatusText(item.status) }}
+              </van-tag>
             </div>
             <div class="apply-post-title">
               组局：{{ item.postTitle }}

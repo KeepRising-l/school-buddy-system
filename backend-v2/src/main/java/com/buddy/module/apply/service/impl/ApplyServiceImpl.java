@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buddy.common.cache.CacheEpoch;
 import com.buddy.common.constant.ApplyStatus;
 import com.buddy.common.constant.CreditConstant;
 import com.buddy.common.constant.PostStatus;
@@ -31,7 +32,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -57,6 +63,9 @@ public class ApplyServiceImpl implements ApplyService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired(required = false)
+    private CacheEpoch cacheEpoch;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -284,12 +293,13 @@ public class ApplyServiceImpl implements ApplyService {
     }
 
     /**
-     * 自动递补：APPROVED 报名取消后，候补队列第一位转 PENDING 并通知
+     * 自动递补：APPROVED 报名取消或递补被拒后，候补队列第一位转 PENDING 并通知
      *
      * @param post 相关帖子
+     * @return true=成功递补了一位候补者；false=无候补者可递补
      */
     @Transactional(rollbackFor = Exception.class)
-    public void promoteWaitlist(Post post) {
+    public boolean promoteWaitlist(Post post) {
         // 查询候补队列第一位（按候补时间升序）
         PostApply firstWait = postApplyMapper.selectOne(
                 new LambdaQueryWrapper<PostApply>()
@@ -299,7 +309,7 @@ public class ApplyServiceImpl implements ApplyService {
                         .last("LIMIT 1")
         );
         if (firstWait == null) {
-            return;
+            return false;
         }
 
         // 递补为待审核（条件更新防并发重复递补：只有一个请求能把候补置为待审核）
@@ -309,7 +319,7 @@ public class ApplyServiceImpl implements ApplyService {
                 .set(PostApply::getStatus, ApplyStatus.PENDING)
                 .set(PostApply::getHandleTime, LocalDateTime.now()));
         if (promoted == 0) {
-            return;
+            return false;
         }
         firstWait.setStatus(ApplyStatus.PENDING);
 
@@ -324,6 +334,7 @@ public class ApplyServiceImpl implements ApplyService {
                 "有递补申请",
                 "候补用户已递补，请及时审核",
                 "/post/" + post.getId(), post.getId());
+        return true;
     }
 
     @Override
@@ -367,23 +378,27 @@ public class ApplyServiceImpl implements ApplyService {
             throw new BusinessException("当前报名状态不可取消");
         }
 
-        // 已通过（APPROVED）的报名取消后：人数-1，若满员则回退为招募中（原子操作）
+        // 已通过（APPROVED）的报名取消后：人数-1，若有候补则优先递补，无候补时回退为招募中
         if (ApplyStatus.APPROVED.equals(originalStatus)) {
             postMapper.decrementCurrentPeople(post.getId());
             post = postMapper.selectById(post.getId());
 
-            // 候补递补：满员时有候补则先递补（递补后仍是 PENDING，人数不变）
-            if (PostStatus.FULL.equals(post.getStatus())) {
-                promoteWaitlist(post);
-                // 递补后重新查询（递补不改变 current_people，若无人候补则回退）
-                post = postMapper.selectById(post.getId());
-                if (post.getCurrentPeople() < post.getMaxPeople()) {
-                    // 条件更新：仅在仍为满员时回退为招募中，避免覆盖并发的取消/下架
-                    postMapper.update(null, new LambdaUpdateWrapper<Post>()
-                            .eq(Post::getId, post.getId())
-                            .eq(Post::getStatus, PostStatus.FULL)
-                            .set(Post::getStatus, PostStatus.RECRUITING));
+            // 候补递补：满员时有候补则先递补（递补后该名额留给候补队首审核，不立即退回 RECRUITING，防路人插队）
+            if (post != null && PostStatus.FULL.equals(post.getStatus())) {
+                boolean promoted = promoteWaitlist(post);
+                if (!promoted) {
+                    post = postMapper.selectById(post.getId());
+                    if (post != null && post.getCurrentPeople() < post.getMaxPeople()) {
+                        // 无人候补时，仅在仍为满员时回退为招募中，避免覆盖并发的取消/下架
+                        postMapper.update(null, new LambdaUpdateWrapper<Post>()
+                                .eq(Post::getId, post.getId())
+                                .eq(Post::getStatus, PostStatus.FULL)
+                                .set(Post::getStatus, PostStatus.RECRUITING));
+                    }
                 }
+            }
+            if (cacheEpoch != null) {
+                cacheEpoch.bump();
             }
         }
 
@@ -391,7 +406,7 @@ public class ApplyServiceImpl implements ApplyService {
         // 仅 APPROVED（已占名额）取消才扣分；PENDING/WAITLIST 未占名额不扣
         // 写台账+即时重算，惩罚实时生效且不被每日重算冲掉
         if (ApplyStatus.APPROVED.equals(originalStatus)
-                && post.getStartTime() != null) {
+                && post != null && post.getStartTime() != null) {
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime startTime = post.getStartTime();
             if (now.isAfter(startTime.minusHours(1)) && now.isBefore(startTime)) {
@@ -457,6 +472,9 @@ public class ApplyServiceImpl implements ApplyService {
                     .in(Post::getStatus, PostStatus.RECRUITING, PostStatus.FULL)
                     .set(Post::getStatus, PostStatus.FULL));
         }
+        if (cacheEpoch != null) {
+            cacheEpoch.bump();
+        }
 
         // 通知报名者：审核通过
         User applicant = userMapper.selectById(apply.getApplicantId());
@@ -510,6 +528,20 @@ public class ApplyServiceImpl implements ApplyService {
                     "很遗憾，你报名「" + post.getTitle() + "」未通过审核",
                     "/post/" + post.getId(), post.getId());
         }
+
+        // 若被拒的是满员后递补上来的申请，继续尝试递补下一位候补者；若已无候补且未满员则回退为招募中
+        if (PostStatus.FULL.equals(post.getStatus()) && post.getCurrentPeople() < post.getMaxPeople()) {
+            boolean promoted = promoteWaitlist(post);
+            if (!promoted) {
+                postMapper.update(null, new LambdaUpdateWrapper<Post>()
+                        .eq(Post::getId, post.getId())
+                        .eq(Post::getStatus, PostStatus.FULL)
+                        .set(Post::getStatus, PostStatus.RECRUITING));
+                if (cacheEpoch != null) {
+                    cacheEpoch.bump();
+                }
+            }
+        }
     }
 
     @Override
@@ -528,11 +560,32 @@ public class ApplyServiceImpl implements ApplyService {
                         .eq(PostApply::getPostId, postId)
                         .orderByDesc(PostApply::getApplyTime)
         );
+        if (applies == null || applies.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 批量查询申请人信息（消除 N+1）
+        Set<Long> applicantIds = new HashSet<>();
+        for (PostApply apply : applies) {
+            if (apply.getApplicantId() != null) {
+                applicantIds.add(apply.getApplicantId());
+            }
+        }
+        Map<Long, User> userMap = new HashMap<>();
+        if (!applicantIds.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(applicantIds);
+            if (users != null) {
+                for (User u : users) {
+                    if (u != null && u.getId() != null) {
+                        userMap.put(u.getId(), u);
+                    }
+                }
+            }
+        }
+
         return applies.stream().map(apply -> {
             ApplyVO vo = toApplyVO(apply);
-
-            // 查询申请人信息
-            User applicant = userMapper.selectById(apply.getApplicantId());
+            User applicant = userMap.get(apply.getApplicantId());
             if (applicant != null) {
                 vo.setApplicantNickname(applicant.getNickname());
                 vo.setApplicantAvatar(applicant.getAvatar());
@@ -544,7 +597,7 @@ public class ApplyServiceImpl implements ApplyService {
 
     @Override
     public IPage<ApplyVO> getReceivedApplies(Long userId, int page, int size) {
-        // 查询当前用户发布的帖子ID列表
+        // 查询当前用户发布的帖子列表
         List<Post> myPosts = postMapper.selectList(
                 new LambdaQueryWrapper<Post>().eq(Post::getPublisherId, userId)
         );
@@ -552,7 +605,14 @@ public class ApplyServiceImpl implements ApplyService {
             return new Page<>(page, size);
         }
 
-        List<Long> postIds = myPosts.stream().map(Post::getId).collect(Collectors.toList());
+        Map<Long, Post> postMap = new HashMap<>();
+        List<Long> postIds = new ArrayList<>(myPosts.size());
+        for (Post p : myPosts) {
+            if (p != null && p.getId() != null) {
+                postIds.add(p.getId());
+                postMap.put(p.getId(), p);
+            }
+        }
 
         // 查询这些帖子的报名记录
         IPage<PostApply> applyPage = postApplyMapper.selectPage(
@@ -562,21 +622,38 @@ public class ApplyServiceImpl implements ApplyService {
                         .orderByDesc(PostApply::getApplyTime)
         );
 
-        // 转换为ApplyVO
+        List<PostApply> records = applyPage.getRecords() != null ? applyPage.getRecords() : Collections.emptyList();
+        Set<Long> applicantIds = new HashSet<>();
+        for (PostApply apply : records) {
+            if (apply.getApplicantId() != null) {
+                applicantIds.add(apply.getApplicantId());
+            }
+        }
+        Map<Long, User> userMap = new HashMap<>();
+        if (!applicantIds.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(applicantIds);
+            if (users != null) {
+                for (User u : users) {
+                    if (u != null && u.getId() != null) {
+                        userMap.put(u.getId(), u);
+                    }
+                }
+            }
+        }
+
+        // 转换为ApplyVO（复用 postMap 与批量 userMap，消除 N+1）
         IPage<ApplyVO> voPage = new Page<>(applyPage.getCurrent(), applyPage.getSize(), applyPage.getTotal());
-        voPage.setRecords(applyPage.getRecords().stream().map(apply -> {
+        voPage.setRecords(records.stream().map(apply -> {
             ApplyVO vo = toApplyVO(apply);
 
-            // 查询申请人信息
-            User applicant = userMapper.selectById(apply.getApplicantId());
+            User applicant = userMap.get(apply.getApplicantId());
             if (applicant != null) {
                 vo.setApplicantNickname(applicant.getNickname());
                 vo.setApplicantAvatar(applicant.getAvatar());
                 vo.setApplicantCreditLevel(creditService.getCreditLevel(applicant.getCreditScore()));
             }
 
-            // 查询帖子标题
-            Post post = postMapper.selectById(apply.getPostId());
+            Post post = postMap.get(apply.getPostId());
             if (post != null) {
                 vo.setPostTitle(post.getTitle());
             }

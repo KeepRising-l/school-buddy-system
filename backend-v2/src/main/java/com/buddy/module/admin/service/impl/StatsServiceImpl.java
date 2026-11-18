@@ -128,83 +128,88 @@ public class StatsServiceImpl implements StatsService {
     @Override
     public List<Map<String, Object>> getPostTrend(int days) {
         days = clampDays(days);
-        List<Map<String, Object>> result = new ArrayList<>();
         LocalDate today = LocalDate.now();
+        LocalDateTime start = LocalDateTime.of(today.minusDays(days - 1L), LocalTime.MIN);
+        Map<String, Long> countByDate = toDateCountMap(postMapper.countDailyPostsSince(start));
 
-        for (int i = clampDays(days) - 1; i >= 0; i--) {
-            LocalDate date = today.minusDays(i);
-            LocalDateTime dayStart = LocalDateTime.of(date, LocalTime.MIN);
-            LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
-
-            Long count = postMapper.selectCount(
-                    new LambdaQueryWrapper<Post>()
-                            .ge(Post::getCreatedTime, dayStart)
-                            .le(Post::getCreatedTime, dayEnd)
-            );
-
+        List<Map<String, Object>> result = new ArrayList<>(days);
+        for (int i = days - 1; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
             Map<String, Object> item = new HashMap<>();
-            item.put("date", date.toString());
-            item.put("count", count);
+            item.put("date", date);
+            item.put("count", countByDate.getOrDefault(date, 0L));
             result.add(item);
         }
-
         return result;
     }
 
     @Override
     public List<Map<String, Object>> getSuccessMatchTrend(int days) {
-        List<Map<String, Object>> result = new ArrayList<>();
+        days = clampDays(days);
         LocalDate today = LocalDate.now();
+        LocalDateTime start = LocalDateTime.of(today.minusDays(days - 1L), LocalTime.MIN);
+        Map<String, Long> countByDate = toDateCountMap(postMapper.countDailyFinishedSince(start));
 
-        for (int i = clampDays(days) - 1; i >= 0; i--) {
-            LocalDate date = today.minusDays(i);
-            LocalDateTime dayStart = LocalDateTime.of(date, LocalTime.MIN);
-            LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
-
-            Long count = postMapper.selectCount(
-                    new LambdaQueryWrapper<Post>()
-                            .eq(Post::getStatus, PostStatus.FINISHED)
-                            .ge(Post::getUpdatedTime, dayStart)
-                            .le(Post::getUpdatedTime, dayEnd)
-            );
-
+        List<Map<String, Object>> result = new ArrayList<>(days);
+        for (int i = days - 1; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
             Map<String, Object> item = new HashMap<>();
-            item.put("date", date.toString());
-            item.put("count", count);
+            item.put("date", date);
+            item.put("count", countByDate.getOrDefault(date, 0L));
             result.add(item);
         }
-
         return result;
     }
 
     @Override
     public List<Map<String, Object>> getActiveUserTrend(int days) {
-        List<Map<String, Object>> result = new ArrayList<>();
+        days = clampDays(days);
         LocalDate today = LocalDate.now();
+        LocalDateTime start = LocalDateTime.of(today.minusDays(days - 1L), LocalTime.MIN);
 
-        for (int i = clampDays(days) - 1; i >= 0; i--) {
-            LocalDate date = today.minusDays(i);
-            LocalDateTime dayStart = LocalDateTime.of(date, LocalTime.MIN);
-            LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
+        // 仅用 2 条聚合查询取代 2*days 条循环查询，内存按日期求发帖+报名用户并集
+        Map<String, Set<Long>> dailyActiveMap = new HashMap<>();
+        accumulateDailyUsers(dailyActiveMap, postMapper.selectDailyPublishersSince(start));
+        accumulateDailyUsers(dailyActiveMap, postApplyMapper.selectDailyApplicantsSince(start));
 
-            // 当天发帖/报名的用户并集（同一用户重复动作只计一次，避免直接相加重复计数）
-            long activeCount = countActiveUsers(
-                    postMapper.selectObjs(new QueryWrapper<Post>()
-                            .select("DISTINCT publisher_id")
-                            .ge("created_time", dayStart)
-                            .le("created_time", dayEnd)),
-                    postApplyMapper.selectObjs(new QueryWrapper<PostApply>()
-                            .select("DISTINCT applicant_id")
-                            .ge("apply_time", dayStart)
-                            .le("apply_time", dayEnd)));
-
+        List<Map<String, Object>> result = new ArrayList<>(days);
+        for (int i = days - 1; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
+            Set<Long> users = dailyActiveMap.get(date);
             Map<String, Object> item = new HashMap<>();
-            item.put("date", date.toString());
-            item.put("count", activeCount);
+            item.put("date", date);
+            item.put("count", users == null ? 0L : (long) users.size());
             result.add(item);
         }
-
         return result;
+    }
+
+    private static Map<String, Long> toDateCountMap(List<Map<String, Object>> rows) {
+        Map<String, Long> map = new HashMap<>();
+        if (rows != null) {
+            for (Map<String, Object> row : rows) {
+                if (row == null) continue;
+                Object d = row.get("d");
+                Object c = row.get("c");
+                if (d != null) {
+                    map.put(String.valueOf(d), c instanceof Number ? ((Number) c).longValue() : 0L);
+                }
+            }
+        }
+        return map;
+    }
+
+    private static void accumulateDailyUsers(Map<String, Set<Long>> target, List<Map<String, Object>> rows) {
+        if (rows == null) return;
+        for (Map<String, Object> row : rows) {
+            if (row == null) continue;
+            Object d = row.get("d");
+            Object uid = row.get("uid");
+            if (d != null && uid instanceof Number) {
+                target.computeIfAbsent(String.valueOf(d), k -> new HashSet<>())
+                        .add(((Number) uid).longValue());
+            }
+        }
     }
 
     @Override
@@ -264,22 +269,25 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public List<Map<String, Object>> getUserGrowthTrend(int days) {
-        List<Map<String, Object>> result = new ArrayList<>();
+        days = clampDays(days);
         LocalDate today = LocalDate.now();
+        LocalDateTime start = LocalDateTime.of(today.minusDays(days - 1L), LocalTime.MIN);
 
-        for (int i = clampDays(days) - 1; i >= 0; i--) {
-            LocalDate date = today.minusDays(i);
-            LocalDateTime dayEnd = LocalDateTime.of(date, LocalTime.MAX);
+        // 窗口起点之前的历史累计用户数（1次查询）+ 窗口内每日新增聚合（1次查询），消除 N 次循环 COUNT
+        Long beforeCount = userMapper.selectCount(
+                new LambdaQueryWrapper<User>().lt(User::getCreatedTime, start)
+        );
+        long runningTotal = beforeCount != null ? beforeCount : 0L;
+        Map<String, Long> dailyNew = toDateCountMap(userMapper.countDailyNewUsersSince(start));
 
-            // 累计注册用户数：注册时间 <= 当天结束
-            Long count = userMapper.selectCount(
-                    new LambdaQueryWrapper<User>()
-                            .le(User::getCreatedTime, dayEnd)
-            );
+        List<Map<String, Object>> result = new ArrayList<>(days);
+        for (int i = days - 1; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
+            runningTotal += dailyNew.getOrDefault(date, 0L);
 
             Map<String, Object> item = new HashMap<>();
-            item.put("date", date.toString());
-            item.put("count", count);
+            item.put("date", date);
+            item.put("count", runningTotal);
             result.add(item);
         }
 

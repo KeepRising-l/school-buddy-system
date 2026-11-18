@@ -118,7 +118,7 @@
             <UserAvatar :name="c.nickname" :avatar="c.avatar" :size="32" />
             <div class="comment-body"><span class="comment-name">{{ c.nickname }}</span>
               <p class="comment-content">{{ c.content }}</p>
-              <span class="comment-time">{{ formatTime(c.createTime) }}</span>
+              <span class="comment-time">{{ formatTime(c.createdTime || c.createTime) }}</span>
             </div>
           </div>
         </div>
@@ -470,16 +470,16 @@ const applyBlockReason = computed(() => {
   if (applyStatus.value) return ''
   // 仅招募中/已满员（可候补）时预检
   if (p.status !== 'RECRUITING' && p.status !== 'FULL') return ''
-  if (!p.requireLevel || p.requireLevel === 0) return ''
   if (!userStore.isLoggedIn) return ''
-  // 信誉分
+  // 1. 信誉分预检（无段位要求的帖子同样适用）
   const credit = userStore.userInfo?.creditScore ?? 100
   if (credit < 60) return '你的信誉分不足60，无法报名该组局'
-  // 性别
+  // 2. 性别预检（无段位要求的帖子同样适用）
   if (p.requireGender && p.requireGender !== 0 && userStore.userInfo?.gender !== p.requireGender) {
     return `性别不满足要求（${requireGenderText.value}）`
   }
-  // 段位：帖子任一相关标签上的用户最高段位需达到要求（与后端一致）
+  // 3. 段位预检：仅设置了段位门槛时校验
+  if (!p.requireLevel || p.requireLevel === 0) return ''
   const tagIds = String(p.tagIds || '').split(',').map(Number).filter(Boolean)
   if (!tagIds.length) return '该组局未设置项目标签，无法校验段位'
   const myLevel = myTags.value

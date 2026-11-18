@@ -144,35 +144,40 @@ public class CreditServiceImpl implements CreditService {
 
     /**
      * 计算单条评价对信誉分的影响
-     * 以标签为主计算（PRD 中"标签 → 星级 → 信誉分影响"是整体映射关系），
-     * 星级仅在没有标签时作兜底，避免 5星+靠谱 被重复累加（原 bug：+2+2=+4）。
+     * 支持逗号分隔的多标签：遍历所有选中标签求极值（负面优先于正面，正面最高+2，负面最低-10），
+     * 既避免多选正面标签重复累加刷分，也消除因标签勾选顺序不同导致排在后面的标签失效的问题。
+     * 星级仅在没有标签时作兜底。
      */
     private int calculateReviewImpact(Review review) {
         int impact = 0;
 
         String tag = review.getTag();
         if (tag != null && !tag.isEmpty()) {
-            // 支持逗号分隔的多标签，取第一个有效标签计算
-            String primaryTag = tag.split(",")[0].trim();
-            switch (primaryTag) {
-                case "靠谱":
-                case "友好":
-                case "技术好":
-                    impact += CreditConstant.RELIABLE_BONUS;
-                    break;
-                case "准时":
-                    impact += CreditConstant.FOUR_STAR_BONUS;
-                    break;
-                case "迟到":
-                case "态度差":
-                    impact += CreditConstant.LATE_PENALTY;
-                    break;
-                case "爽约":
-                    impact += CreditConstant.NOSHOW_PENALTY;
-                    break;
-                default:
-                    break;
+            int maxPositive = 0;
+            int minNegative = 0;
+            for (String raw : tag.split(",")) {
+                String t = raw.trim();
+                switch (t) {
+                    case "靠谱":
+                    case "友好":
+                    case "技术好":
+                        maxPositive = Math.max(maxPositive, CreditConstant.RELIABLE_BONUS);
+                        break;
+                    case "准时":
+                        maxPositive = Math.max(maxPositive, CreditConstant.FOUR_STAR_BONUS);
+                        break;
+                    case "迟到":
+                    case "态度差":
+                        minNegative = Math.min(minNegative, CreditConstant.LATE_PENALTY);
+                        break;
+                    case "爽约":
+                        minNegative = Math.min(minNegative, CreditConstant.NOSHOW_PENALTY);
+                        break;
+                    default:
+                        break;
+                }
             }
+            impact = minNegative < 0 ? minNegative : maxPositive;
         } else if (review.getRating() != null) {
             // 无标签时用星级兜底
             if (review.getRating() >= 5) {

@@ -14,7 +14,7 @@
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="searchForm.category" placeholder="全部" clearable style="width: 140px">
-            <el-option v-for="tag in tagOptions" :key="tag.id" :label="tag.name" :value="tag.name" />
+            <el-option v-for="cat in categoryOptions" :key="cat" :label="cat" :value="cat" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -77,7 +77,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getPostList, takedownPost, deletePost, getTagList, exportPosts } from '@/api/admin'
+import { getPostList, takedownPost, deletePost, getTagCategories, exportPosts } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { downloadFromBlob } from '@/utils/download'
 
@@ -87,8 +87,8 @@ const searchForm = reactive({
   category: ''
 })
 
-// 分类选项
-const tagOptions = ref([])
+// 分类选项（大类名称：球类/电竞/桌游/跑步等）
+const categoryOptions = ref([])
 
 // 表格数据
 const loading = ref(false)
@@ -133,11 +133,11 @@ const loadData = async () => {
   }
 }
 
-// 加载分类选项
+// 加载分类选项（使用全部分类大类列表，修复原误绑具体项目名导致分类筛选查不到数据的问题）
 const loadTagOptions = async () => {
   try {
-    const res = await getTagList()
-    tagOptions.value = Array.isArray(res.data) ? res.data : []
+    const res = await getTagCategories()
+    categoryOptions.value = Array.isArray(res.data) ? res.data : []
   } catch (e) {
     // 错误已在拦截器中处理
   }

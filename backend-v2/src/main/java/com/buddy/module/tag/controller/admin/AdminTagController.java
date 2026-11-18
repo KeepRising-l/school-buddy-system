@@ -26,12 +26,12 @@ public class AdminTagController {
     private TagService tagService;
 
     /**
-     * 全部标签（与用户端同源：仅启用项，等价旧版）
+     * 管理端全部标签（含启用与禁用状态，供管理端列表展示与双向状态切换）
      */
     @RequireAdmin
     @GetMapping("/list")
     public R<List<InterestTag>> getAllTags() {
-        return R.ok(tagService.getAllTags());
+        return R.ok(tagService.getAdminAllTags());
     }
 
     /**

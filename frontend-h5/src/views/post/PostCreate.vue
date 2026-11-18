@@ -485,10 +485,6 @@ const validate = () => {
     fail(`开始时间已过去，请选择未来的时间。\n当前时间：${formatDateTime(now)}\n你选择的：${formatDateTime(start)}`, '时间不符合要求')
     return false
   }
-  if (start <= now.getTime() + 60 * 60 * 1000) {
-    fail(`开始时间距现在不足 1 小时，请选晚一点的时间。\n当前时间：${formatDateTime(now)}\n你选择的：${formatDateTime(start)}`, '时间不符合要求')
-    return false
-  }
   if (end <= start) {
     // 用户明确要求：开始晚于结束时要提示选错了 + 为什么
     fail(`时间选错了：开始时间晚于结束时间，请重新选择。\n开始时间：${formatDateTime(start)}\n结束时间：${formatDateTime(end)}`, '时间不符合要求')

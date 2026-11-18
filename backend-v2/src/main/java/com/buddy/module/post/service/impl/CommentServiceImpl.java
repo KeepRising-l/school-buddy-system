@@ -83,9 +83,34 @@ public class CommentServiceImpl implements CommentService {
                         .orderByDesc(PostComment::getCreatedTime)
         );
 
-        // 转换为CommentVO并填充用户信息
+        List<PostComment> records = commentPage.getRecords();
         IPage<CommentVO> voPage = new Page<>(commentPage.getCurrent(), commentPage.getSize(), commentPage.getTotal());
-        voPage.setRecords(commentPage.getRecords().stream().map(c -> {
+        if (records == null || records.isEmpty()) {
+            voPage.setRecords(java.util.Collections.emptyList());
+            return voPage;
+        }
+
+        // 批量查询评论者信息（一次 IN 查询消除 N+1）
+        java.util.Set<Long> userIds = new java.util.HashSet<>();
+        for (PostComment c : records) {
+            if (c.getUserId() != null) {
+                userIds.add(c.getUserId());
+            }
+        }
+        java.util.Map<Long, User> userMap = new java.util.HashMap<>();
+        if (!userIds.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(userIds);
+            if (users != null) {
+                for (User u : users) {
+                    if (u != null && u.getId() != null) {
+                        userMap.put(u.getId(), u);
+                    }
+                }
+            }
+        }
+
+        // 转换为CommentVO并填充用户信息
+        voPage.setRecords(records.stream().map(c -> {
             CommentVO vo = new CommentVO();
             vo.setId(c.getId());
             vo.setPostId(c.getPostId());
@@ -93,8 +118,7 @@ public class CommentServiceImpl implements CommentService {
             vo.setContent(c.getContent());
             vo.setCreatedTime(c.getCreatedTime());
 
-            // 查询评论者信息
-            User user = userMapper.selectById(c.getUserId());
+            User user = userMap.get(c.getUserId());
             if (user != null) {
                 vo.setNickname(user.getNickname());
                 vo.setAvatar(user.getAvatar());

@@ -5,9 +5,9 @@
       <el-button type="primary" @click="handleAdd">添加标签</el-button>
     </el-card>
 
-    <!-- 标签表格 -->
+    <!-- 标签表格（绑定 sortedData 与 categorySpanMethod 保持同源排序，防止合并行错位） -->
     <el-card shadow="never" class="table-card">
-      <el-table :data="tableData" border stripe v-loading="loading" :span-method="categorySpanMethod">
+      <el-table :data="sortedData" border stripe v-loading="loading" :span-method="categorySpanMethod">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="category" label="分类" width="140" />
         <el-table-column prop="name" label="项目名" width="140" />

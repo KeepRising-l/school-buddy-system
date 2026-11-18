@@ -7,6 +7,7 @@ import com.buddy.common.exception.BusinessException;
 import com.buddy.common.result.ResultCode;
 import com.buddy.module.apply.entity.PostApply;
 import com.buddy.module.apply.mapper.PostApplyMapper;
+import com.buddy.module.credit.service.CreditService;
 import com.buddy.module.post.entity.Post;
 import com.buddy.module.post.mapper.PostMapper;
 import com.buddy.module.review.dto.request.ReviewRequest;
@@ -23,7 +24,7 @@ import java.util.List;
 
 /**
  * 评价服务实现类（等价迁移自旧版）
- * 说明：评价对信誉分的影响由每日重算任务统一生效（CreditCalculateTask），与旧版一致
+ * 说明：评价提交后即时重算被评价人信誉分，同时每日重算任务兜底（CreditCalculateTask）
  */
 @Service
 public class ReviewServiceImpl implements ReviewService {
@@ -39,6 +40,9 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Autowired
     private PostApplyMapper postApplyMapper;
+
+    @Autowired(required = false)
+    private CreditService creditService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -118,6 +122,11 @@ public class ReviewServiceImpl implements ReviewService {
         review.setContent(request.getContent());
 
         reviewMapper.insert(review);
+
+        // 评价提交后立即重算被评价人信誉分（实时生效，不再等次日凌晨定时任务）
+        if (creditService != null) {
+            creditService.recalculateUserCredit(request.getTargetUserId());
+        }
     }
 
     @Override

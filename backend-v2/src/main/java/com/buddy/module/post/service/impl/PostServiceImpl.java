@@ -287,20 +287,39 @@ public class PostServiceImpl implements PostService {
             detailVO.setPublisherSignature(publisher.getSignature());
             detailVO.setPublisherCollege(publisher.getCollege());
 
-            // 查询发布者的兴趣标签
+            // 查询发布者的兴趣标签（批量查询 InterestTag，消除 N+1）
             List<UserTag> publisherUserTags = userTagMapper.selectList(
                     new LambdaQueryWrapper<UserTag>().eq(UserTag::getUserId, publisher.getId())
             );
             List<PostDetailVO.PublisherTagVO> publisherTags = new ArrayList<>();
-            for (UserTag ut : publisherUserTags) {
-                InterestTag tag = interestTagMapper.selectById(ut.getTagId());
-                if (tag != null && tag.getStatus() == 1) {
-                    PostDetailVO.PublisherTagVO tagVO = new PostDetailVO.PublisherTagVO();
-                    tagVO.setTagId(tag.getId());
-                    tagVO.setTagName(tag.getName());
-                    tagVO.setCategory(tag.getCategory());
-                    tagVO.setSelfLevel(ut.getSelfLevel());
-                    publisherTags.add(tagVO);
+            if (publisherUserTags != null && !publisherUserTags.isEmpty()) {
+                Set<Long> pubTagIds = new HashSet<>();
+                for (UserTag ut : publisherUserTags) {
+                    if (ut.getTagId() != null) {
+                        pubTagIds.add(ut.getTagId());
+                    }
+                }
+                Map<Long, InterestTag> tagMap = new HashMap<>();
+                if (!pubTagIds.isEmpty()) {
+                    List<InterestTag> tags = interestTagMapper.selectBatchIds(pubTagIds);
+                    if (tags != null) {
+                        for (InterestTag t : tags) {
+                            if (t != null && t.getId() != null) {
+                                tagMap.put(t.getId(), t);
+                            }
+                        }
+                    }
+                }
+                for (UserTag ut : publisherUserTags) {
+                    InterestTag tag = tagMap.get(ut.getTagId());
+                    if (tag != null && tag.getStatus() != null && tag.getStatus() == 1) {
+                        PostDetailVO.PublisherTagVO tagVO = new PostDetailVO.PublisherTagVO();
+                        tagVO.setTagId(tag.getId());
+                        tagVO.setTagName(tag.getName());
+                        tagVO.setCategory(tag.getCategory());
+                        tagVO.setSelfLevel(ut.getSelfLevel());
+                        publisherTags.add(tagVO);
+                    }
                 }
             }
             detailVO.setPublisherTags(publisherTags);
@@ -397,25 +416,17 @@ public class PostServiceImpl implements PostService {
 
     @Override
     public void incrementViewCount(Long postId, Long userId) {
-        // 去重：10分钟内同一用户只计一次（辅助存储，默认 MySQL，可切换 Redis）
-        String key = VIEW_COUNT_KEY + postId + ":" + userId;
+        // 游客未登录时按匿名窗口处理，登录用户按 10 分钟去重（辅助存储，默认 MySQL，可切换 Redis）
+        String suffix = userId != null ? String.valueOf(userId) : "guest";
+        String key = VIEW_COUNT_KEY + postId + ":" + suffix;
         try {
             boolean isNew = auxStore.setIfAbsent(key, Duration.ofMinutes(VIEW_DEDUP_MINUTES));
             if (isNew) {
-                // 浏览量+1
-                Post post = postMapper.selectById(postId);
-                if (post != null) {
-                    post.setViewCount(post.getViewCount() + 1);
-                    postMapper.updateById(post);
-                }
+                postMapper.incrementViewCount(postId);
             }
         } catch (Exception e) {
-            // 辅助存储不可用，直接+1浏览量（不去重）
-            Post post = postMapper.selectById(postId);
-            if (post != null) {
-                post.setViewCount(post.getViewCount() + 1);
-                postMapper.updateById(post);
-            }
+            // 辅助存储不可用，直接原子+1浏览量（不去重）
+            postMapper.incrementViewCount(postId);
         }
     }
 

@@ -37,7 +37,9 @@ public class TagServiceImpl implements TagService {
     public void disableTag(Long tagId) {
         InterestTag tag = interestTagMapper.selectById(tagId);
         if (tag != null) {
-            tag.setStatus(0);
+            // 双向切换状态：1(启用) -> 0(禁用)，0(禁用) -> 1(启用)
+            int nextStatus = (tag.getStatus() != null && tag.getStatus() == 1) ? 0 : 1;
+            tag.setStatus(nextStatus);
             interestTagMapper.updateById(tag);
         }
     }
@@ -48,6 +50,18 @@ public class TagServiceImpl implements TagService {
                 new LambdaQueryWrapper<InterestTag>()
                         .eq(InterestTag::getStatus, 1)
                         .orderByAsc(InterestTag::getSortOrder)
+        );
+        fillHasLevel(tags);
+        return tags;
+    }
+
+    @Override
+    public List<InterestTag> getAdminAllTags() {
+        List<InterestTag> tags = interestTagMapper.selectList(
+                new LambdaQueryWrapper<InterestTag>()
+                        .orderByAsc(InterestTag::getCategory)
+                        .orderByAsc(InterestTag::getSortOrder)
+                        .orderByAsc(InterestTag::getId)
         );
         fillHasLevel(tags);
         return tags;

@@ -7,6 +7,7 @@
     <van-tabs v-model:active="activeTab" @change="onTabChange">
       <van-tab title="全部" name="ALL" />
       <van-tab title="招募中" name="RECRUITING" />
+      <van-tab title="已满员" name="FULL" />
       <van-tab title="进行中" name="ONGOING" />
       <van-tab title="已结束" name="FINISHED" />
     </van-tabs>
@@ -32,8 +33,10 @@
               <span>{{ post.currentPeople }}/{{ post.maxPeople }}人</span>
               <span>{{ formatTime(post.startTime) }}</span>
             </div>
-            <div class="post-actions" v-if="post.status === 'RECRUITING' || post.status === 'FULL'">
-              <van-button size="small" type="primary" plain @click.stop="goManageApply(post.id)">管理报名</van-button>
+            <div class="post-actions" v-if="['RECRUITING', 'FULL', 'ONGOING', 'FINISHED'].includes(post.status)">
+              <van-button size="small" type="primary" plain @click.stop="goManageApply(post)">
+                {{ post.status === 'FINISHED' || post.status === 'ONGOING' ? '管理/标记出勤' : '管理报名' }}
+              </van-button>
             </div>
           </div>
           <EmptyState
@@ -64,6 +67,10 @@
               <van-button size="small" type="primary" @click="handleApprove(item.id)">通过</van-button>
               <van-button size="small" type="danger" plain @click="handleReject(item.id)">拒绝</van-button>
             </div>
+            <div class="apply-actions" v-else-if="item.status === 'APPROVED' && canMarkCurrentPostAttendance">
+              <van-button size="small" type="success" @click="handleMarkAttendance(item.id, true)">已出勤</van-button>
+              <van-button size="small" type="danger" plain @click="handleMarkAttendance(item.id, false)">未到场</van-button>
+            </div>
           </div>
         </div>
         <EmptyState v-else icon="friends-o" text="暂无报名" />
@@ -73,11 +80,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { getMyPosts } from '@/api/user'
-import { getApplyList, approveApply, rejectApply } from '@/api/apply'
+import { getApplyList, approveApply, rejectApply, markAttendance } from '@/api/apply'
 import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
@@ -94,6 +101,11 @@ const refreshing = ref(false)
 const showApplySheet = ref(false)
 const applyList = ref([])
 const currentPostId = ref(null)
+const currentPostStatus = ref('')
+
+const canMarkCurrentPostAttendance = computed(() => {
+  return currentPostStatus.value === 'ONGOING' || currentPostStatus.value === 'FINISHED'
+})
 
 // 状态映射
 const statusTextMap = {
@@ -172,15 +184,34 @@ const goDetail = (id) => {
   router.push(`/post/${id}`)
 }
 
-// 管理报名
-const goManageApply = async (postId) => {
-  currentPostId.value = postId
+// 管理报名（兼容传入 post 对象或 postId）
+const goManageApply = async (postOrId) => {
+  if (postOrId && typeof postOrId === 'object') {
+    currentPostId.value = postOrId.id
+    currentPostStatus.value = postOrId.status || ''
+  } else {
+    currentPostId.value = postOrId
+  }
   showApplySheet.value = true
   try {
-    const res = await getApplyList(postId)
+    const res = await getApplyList(currentPostId.value)
     applyList.value = res.data || []
   } catch (err) {
     // 接口层已处理
+  }
+}
+
+// 标记出勤状态（与详情页行为保持一致）
+const handleMarkAttendance = async (applyId, attended) => {
+  try {
+    const msg = attended ? '确定标记为已出勤？' : '确定标记为未到场？（将扣除10信誉分）'
+    await showConfirmDialog({ title: '提示', message: msg })
+    await markAttendance(applyId, attended)
+    showToast(attended ? '已标记出勤' : '已标记未到场')
+    await goManageApply(currentPostId.value)
+    onRefresh()
+  } catch (err) {
+    // 用户取消或接口错误
   }
 }
 
