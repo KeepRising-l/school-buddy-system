@@ -550,4 +550,47 @@ class ApplyServiceImplTest {
         // 递补竞争失败：不得发送"有空位啦"通知
         verify(notificationService, never()).send(any(), any(), any(), any(), any(), any());
     }
+
+    @Test
+    void rejectPromotesNextWaitlistWhenFull() {
+        Post full = post(PostStatus.FULL);
+        full.setCurrentPeople(3); // 4人局当前3人，刚被拒的是递补者
+        PostApply pending = apply("PENDING");
+        PostApply nextWait = apply("WAITLIST");
+        nextWait.setId(101L);
+        nextWait.setApplicantId(9L);
+
+        when(postApplyMapper.selectById(APPLY_ID)).thenReturn(pending);
+        when(postMapper.selectById(POST_ID)).thenReturn(full);
+        when(postApplyMapper.update(isNull(), any())).thenReturn(1);
+        when(userMapper.selectById(APPLICANT_ID)).thenReturn(applicant(0, 100));
+        when(postApplyMapper.selectOne(any())).thenReturn(nextWait);
+
+        applyService.reject(PUBLISHER_ID, APPLY_ID);
+
+        assertThat(nextWait.getStatus()).isEqualTo("PENDING");
+        verify(notificationService).send(eq(9L), eq("WAITLIST_PROMOTED"),
+                eq("有空位啦！"), any(), any(), eq(POST_ID));
+    }
+
+    @Test
+    void checkinByCodeMarksAttendedAndRejectsWrongCode() {
+        Post ongoing = post(PostStatus.ONGOING);
+        when(postMapper.selectById(POST_ID)).thenReturn(ongoing);
+        PostApply approved = apply("APPROVED");
+        lenient().when(postApplyMapper.selectOne(any())).thenReturn(approved);
+        lenient().when(postApplyMapper.update(isNull(), any())).thenReturn(1);
+
+        String validCode = com.buddy.common.statemachine.PostStateMachine.generateCheckinCode(
+                ongoing.getId(), ongoing.getPublisherId(), ongoing.getStartTime());
+
+        // 错误签到码应被拦截
+        assertThatThrownBy(() -> applyService.checkinByCode(APPLICANT_ID, POST_ID, "0000".equals(validCode) ? "9999" : "0000"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("签到码不正确");
+
+        // 正确签到码核销成功
+        applyService.checkinByCode(APPLICANT_ID, POST_ID, validCode);
+        verify(postApplyMapper).update(isNull(), any());
+    }
 }

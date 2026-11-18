@@ -130,9 +130,19 @@ class CreditServiceImplTest {
 
     @Test
     void multiTagTakesFirst() {
-        // 多标签逗号分隔时只取第一个有效标签，避免重复累加
+        // 多标签逗号分隔时取极值，避免重复累加，且与勾选顺序无关
         when(reviewMapper.selectList(any())).thenReturn(List.of(review("靠谱,准时", null)));
         assertThat(creditService.getReviewImpact(1L)).isEqualTo(2);
+    }
+
+    @Test
+    void multiTagOrderIndependentAndNegativeTakesPrecedence() {
+        when(reviewMapper.selectList(any())).thenReturn(List.of(
+                review("准时,靠谱", null),
+                review("友好,爽约", 1)
+        ));
+        // "准时,靠谱" -> +2；"友好,爽约" -> -10；合计 -8
+        assertThat(creditService.getReviewImpact(1L)).isEqualTo(-8);
     }
 
     @Test

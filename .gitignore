@@ -33,3 +33,4 @@ Thumbs.db
 # Redis 本地持久化文件与备份目录
 dump.rdb
 *.rdb
+*.log

@@ -49,4 +49,12 @@ class SensitiveWordServiceTest {
         assertThat(service.check("刷单")).containsExactly("刷单");
         assertThat(service.check("你是废物")).containsExactly("废物");
     }
+
+    @Test
+    void dfaEngineDetectsWordsWithNoiseChars() {
+        // 穿插空格、*、-、· 等干扰符仍能被 DFA 状态机穿透识别
+        assertThat(service.check("兼职代*考包过")).containsExactly("代考");
+        assertThat(service.check("高薪刷 - 单日结")).containsExactly("刷单");
+        assertThat(service.check("同城约·炮交友")).containsExactly("约炮");
+    }
 }
