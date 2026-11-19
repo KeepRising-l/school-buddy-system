@@ -1,97 +1,102 @@
 <template>
   <TabbarLayout>
     <div class="square-page page-with-tabbar">
-      <!-- 顶部区域 -->
-      <div class="square-header">
-        <span class="eyebrow">探索校园</span>
-        <h1 class="page-title">发现组局</h1>
-        <p class="page-subtitle">找到志同道合的伙伴</p>
-      </div>
+      <!-- 顶部极简刊头 Masthead -->
+      <header class="masthead">
+        <div class="masthead-left">
+          <h1 class="masthead-title">校园搭子日程</h1>
+        </div>
+        <div class="masthead-right">
+          <button
+            type="button"
+            class="search-toggle-btn"
+            :class="{ active: showSearch || keyword }"
+            @click="showSearch = !showSearch"
+          >
+            <van-icon name="search" size="15" />
+            <span>{{ keyword ? keyword : '检索' }}</span>
+          </button>
+        </div>
+      </header>
 
-      <!-- 搜索栏 -->
-      <div class="search-wrap">
+      <!-- 折叠式纸面检索框 -->
+      <div v-if="showSearch || keyword" class="search-drawer">
         <van-search
           v-model="keyword"
-          placeholder="搜索组局、地点..."
-          shape="round"
+          placeholder="搜索活动主题、球场或地点..."
           background="transparent"
+          show-action
           @search="onSearch"
+          @clear="onSearch"
+          @cancel="clearAndCloseSearch"
         />
       </div>
 
-      <!-- 系统公告滚动横幅（闭合 P1-2 公告未接入缺口） -->
-      <div class="notice-wrap" v-if="activeNotice">
-        <van-notice-bar
-          left-icon="volume-o"
-          :text="`${activeNotice.title}：${activeNotice.content}`"
-          color="#0d8a6a"
-          background="#ecfdf5"
-          mode="closeable"
-          class="campus-notice-bar"
-          @click="showNoticeDetail(activeNotice)"
-        />
+      <!-- 克制单行公告条 -->
+      <div class="notice-strip" v-if="activeNotice && !noticeClosed" @click="showNoticeDetail(activeNotice)">
+        <span class="notice-kicker">公告</span>
+        <span class="notice-text text-ellipsis">{{ activeNotice.title }} — {{ activeNotice.content }}</span>
+        <button type="button" class="notice-close" @click.stop="noticeClosed = true" aria-label="关闭公告">×</button>
       </div>
 
-      <!-- 你可能感兴趣 · 横向精选推荐位（闭合 PRD 5.3.2 缺口） -->
-      <div class="featured-section" v-if="featuredList.length > 0 && !keyword && !currentCategory">
-        <div class="featured-header">
-          <span class="featured-title">✨ 你可能感兴趣</span>
-          <span class="featured-sub">基于兴趣与信誉智能撮合</span>
+      <!-- 为你挑选的同频组局 · 暖砂底块编辑推荐带 -->
+      <section class="editorial-picks" v-if="featuredList.length > 0 && !keyword && !currentCategory">
+        <div class="picks-caption">
+          <span>为你挑选的同频组局</span>
+          <span class="picks-sub">AI 兴趣推荐</span>
         </div>
-        <div class="featured-scroll">
+        <div class="picks-scroll">
           <div
             v-for="item in featuredList"
             :key="'feat-' + item.id"
-            class="featured-card"
+            class="pick-item"
             @click="goDetail(item.id)"
           >
-            <div class="feat-top">
-              <span class="feat-cat">{{ item.category }}<template v-if="item.tagName"> · {{ item.tagName }}</template></span>
-              <span class="feat-match" v-if="item.matchScore">{{ item.matchScore }}% 契合</span>
+            <div class="pick-score">
+              <template v-if="item.matchScore">{{ item.matchScore }}% 匹配</template>
+              <template v-else>{{ item.category }}</template>
+              <span class="dot-sep">·</span>
+              <span>{{ formatSpotShort(item) }}</span>
             </div>
-            <div class="feat-title text-ellipsis">{{ item.title }}</div>
-            <div class="feat-meta">
-              <span><van-icon name="location-o" /> {{ item.location }}</span>
-              <span>{{ item.currentPeople }}/{{ item.maxPeople }}人</span>
-            </div>
-            <div class="feat-reasons" v-if="item.recommendReasons && item.recommendReasons.length">
-              <span v-for="r in item.recommendReasons" :key="r" class="feat-reason-tag">{{ r }}</span>
+            <div class="pick-title text-ellipsis">{{ item.title }}</div>
+            <div class="pick-note text-ellipsis">
+              {{ item.publisherNickname || '同学' }} · {{ item.location }}
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- 分类筛选标签 -->
-      <div class="filter-section">
-        <div class="filter-scroll">
-          <div
+      <!-- 分类文字下划线导航 -->
+      <nav class="text-tabs-wrap">
+        <div class="text-tabs">
+          <span
             v-for="cat in categories"
             :key="cat.value"
-            :class="['filter-chip', { active: currentCategory === cat.value }]"
+            :class="['t-tab', { active: currentCategory === cat.value }]"
             @click="switchCategory(cat.value)"
           >
-            {{ cat.label }}
-          </div>
+            {{ cat.value === '' ? '全部日程' : cat.label }}
+          </span>
         </div>
-      </div>
+      </nav>
 
-      <!-- 时间筛选 + 排序 -->
-      <div class="sort-section">
-        <div class="time-chips">
-          <div
+      <!-- 次级时间与排序微栏 -->
+      <div class="sub-filter-bar">
+        <div class="time-links">
+          <span
             v-for="item in timeOptions"
             :key="item.value"
-            :class="['time-chip', { active: currentTime === item.value }]"
+            :class="['time-link', { active: currentTime === item.value }]"
             @click="switchTime(item.value)"
           >
             {{ item.label }}
-          </div>
+          </span>
         </div>
-        <div class="sort-tabs">
+        <div class="sort-links">
           <span
             v-for="item in sortOptions"
             :key="item.value"
-            :class="['sort-tab', { active: currentSort === item.value }]"
+            :class="['sort-link', { active: currentSort === item.value }]"
             @click="switchSort(item.value)"
           >
             {{ item.label }}
@@ -99,17 +104,17 @@
         </div>
       </div>
 
-      <!-- 帖子列表 -->
+      <!-- 编辑级流式组局列表 -->
       <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
         <van-list
           v-model:loading="loading"
           :finished="finished"
-          finished-text="没有更多了"
+          finished-text="— 已浏览全部日程 —"
           @load="loadMore"
         >
-          <div class="post-list content">
+          <main class="stream-container">
             <PostCard
-              v-for="(post, index) in postList"
+              v-for="post in postList"
               :key="post.id"
               :post="post"
               class="stagger-item"
@@ -118,11 +123,11 @@
             <EmptyState
               v-if="!loading && !refreshing && postList.length === 0"
               icon="search"
-              text="暂无组局信息"
-              action-text="去发布"
+              text="暂无符合条件的组局日程"
+              action-text="写新组局"
               @action="router.push('/post/create')"
             />
-          </div>
+          </main>
         </van-list>
       </van-pull-refresh>
     </div>
@@ -142,9 +147,17 @@ import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
 
-// 公告与横向精选推荐位
+// 公告、检索展开态与横向精选推荐位
 const activeNotice = ref(null)
+const noticeClosed = ref(false)
+const showSearch = ref(false)
 const featuredList = ref([])
+
+const formatSpotShort = (item) => {
+  const left = Math.max(0, Number(item.maxPeople || 0) - Number(item.currentPeople || 0))
+  if (item.status === 'FULL' || left === 0) return '可排候补'
+  return `余 ${left} 席`
+}
 
 const fetchAnnouncements = async () => {
   try {
@@ -190,15 +203,14 @@ const fetchFeatured = async () => {
   }
 }
 
-// 分类筛选（V1.2 动态加载：跟随管理端分类配置，新增/禁用自动同步；失败回退内置列表）
 const defaultCategories = [
   { label: '全部', value: '' },
   { label: '球类', value: '球类' },
-  { label: '电竞', value: '电竞' },
   { label: '桌游', value: '桌游' },
+  { label: '自习', value: '学习' },
   { label: '跑步', value: '跑步' },
-  { label: '健身', value: '健身' },
-  { label: '学习', value: '学习' }
+  { label: '电竞', value: '电竞' },
+  { label: '健身', value: '健身' }
 ]
 const categories = ref([{ label: '全部', value: '' }])
 
@@ -209,12 +221,10 @@ const fetchCategories = async () => {
     if (list.length) {
       categories.value = [{ label: '全部', value: '' }, ...list.map(c => ({ label: c, value: c }))]
     }
-    // 当前选中的分类被禁用/移除时重置为"全部"
     if (currentCategory.value && !categories.value.some(c => c.value === currentCategory.value)) {
       currentCategory.value = ''
     }
   } catch (e) {
-    // 加载失败回退内置分类，保证筛选可用
     categories.value = defaultCategories
   }
 }
@@ -226,8 +236,8 @@ const sortOptions = [
 ]
 
 const timeOptions = [
-  { label: '不限', value: '' },
-  { label: '今天', value: 'today' },
+  { label: '全部时段', value: '' },
+  { label: '今日', value: 'today' },
   { label: '本周', value: 'week' },
   { label: '本月', value: 'month' }
 ]
@@ -243,7 +253,6 @@ const loading = ref(false)
 const finished = ref(false)
 const refreshing = ref(false)
 
-// 请求序列号：快速切换分类/排序时丢弃过期请求，防止数据错乱
 let requestId = 0
 
 const loadMore = async () => {
@@ -257,7 +266,6 @@ const loadMore = async () => {
       keyword: keyword.value || undefined,
       timeRange: currentTime.value || undefined
     })
-    // 不是最新请求，丢弃结果（避免旧数据覆盖新筛选）
     if (currentRequestId !== requestId) return
     const list = res.data?.records || res.data || []
     if (page.value === 1) {
@@ -271,7 +279,7 @@ const loadMore = async () => {
       page.value++
     }
   } catch (err) {
-    // 修复：失败不置 finished，允许下拉重试（原来伪装成"没有更多了"）
+    // 失败不置 finished，允许下拉重试
   } finally {
     loading.value = false
     refreshing.value = false
@@ -291,6 +299,15 @@ const onSearch = () => {
   postList.value = []
   loading.value = true
   loadMore()
+}
+
+const clearAndCloseSearch = () => {
+  const hadKeyword = Boolean(keyword.value)
+  keyword.value = ''
+  showSearch.value = false
+  if (hadKeyword) {
+    onSearch()
+  }
 }
 
 const switchCategory = (cat) => {
@@ -336,249 +353,243 @@ onMounted(() => {
   background: var(--bg-page);
 }
 
-.square-header {
-  background: var(--bg-card);
-  padding: 24px 20px 40px;
-  border-radius: 0 0 32px 32px;
-  box-shadow: 0 20px 40px -28px rgba(0, 0, 0, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+/* 顶部极简刊头 */
+.masthead {
+  padding: 16px 20px 14px;
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-  .eyebrow {
-    margin-bottom: 10px;
-  }
-
-  .page-title {
-    font-size: 28px;
-    font-weight: 700;
+  .masthead-title {
+    font-size: 19px;
+    font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--text-primary);
   }
 
-  .page-subtitle {
-    margin-top: 6px;
-    font-size: 13px;
-    color: var(--text-hint);
+  .search-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    max-width: 140px;
+    transition: border-color 0.18s var(--ease), color 0.18s var(--ease);
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &.active {
+      border-color: var(--text-primary);
+      color: var(--text-primary);
+    }
   }
 }
 
-.search-wrap {
-  margin: -28px 16px 0;
-  position: relative;
-  z-index: 1;
+.search-drawer {
+  padding: 6px 12px 4px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-page);
 
   :deep(.van-search) {
-    padding: 0;
+    padding: 4px 8px;
   }
 
   :deep(.van-search__content) {
-    background: var(--bg-card);
-    box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.14), var(--shadow-inset-highlight);
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    background: var(--bg-grey);
+    border-radius: var(--radius-md);
   }
 }
 
-.filter-section {
-  padding: 12px 0 0;
-}
-
-.filter-scroll {
+/* 克制单行公告条 */
+.notice-strip {
+  padding: 9px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
   display: flex;
-  overflow-x: auto;
-  padding: 0 16px;
-  gap: 8px;
-  -webkit-overflow-scrolling: touch;
-
-  &::-webkit-scrollbar { display: none; }
-
-  .filter-chip {
-    flex-shrink: 0;
-    padding: 7px 16px;
-    border-radius: 999px;
-    font-size: 13px;
-    color: var(--text-secondary);
-    background: var(--bg-card);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-    cursor: pointer;
-    transition: all 0.3s var(--ease);
-    white-space: nowrap;
-    border: 1px solid var(--border-light);
-
-    &.active {
-      background: var(--primary-soft);
-      color: var(--primary-dark);
-      font-weight: 600;
-      border-color: transparent;
-      box-shadow: none;
-    }
-  }
-}
-
-.sort-section {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 16px 0;
-  margin-bottom: 4px;
+  gap: 8px;
+  cursor: pointer;
 
-  .time-chips {
-    display: flex;
-    gap: 6px;
-
-    .time-chip {
-      padding: 4px 10px;
-      border-radius: 12px;
-      font-size: 11px;
-      color: var(--text-hint);
-      background: var(--bg-card);
-      cursor: pointer;
-      transition: all 0.3s var(--ease);
-
-      &.active {
-        background: var(--primary-soft);
-        color: var(--primary-dark);
-        font-weight: 500;
-      }
-    }
+  .notice-kicker {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary);
   }
 
-  .sort-tabs {
-    display: flex;
-    gap: 16px;
-
-    .sort-tab {
-      font-size: 13px;
-      color: var(--text-hint);
-      cursor: pointer;
-      position: relative;
-      padding-bottom: 4px;
-
-      &.active {
-        color: var(--text-primary);
-        font-weight: 600;
-
-        &::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 16px;
-          height: 2px;
-          background: var(--primary);
-          border-radius: 1px;
-        }
-      }
-    }
-  }
-}
-
-.post-list {
-  padding-top: 4px;
-}
-
-.notice-wrap {
-  margin: 12px 16px 0;
-
-  .campus-notice-bar {
-    border-radius: 14px;
+  .notice-text {
+    flex: 1;
     font-size: 12px;
-    box-shadow: 0 4px 12px rgba(16, 163, 127, 0.08);
+    color: var(--text-secondary);
+  }
+
+  .notice-close {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-hint);
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 2px;
     cursor: pointer;
   }
 }
 
-.featured-section {
-  margin: 14px 0 2px;
+/* 暖砂底块编辑推荐带 */
+.editorial-picks {
+  padding: 14px 20px;
+  background: var(--bg-grey);
+  border-bottom: 1px solid var(--border-color);
 
-  .featured-header {
+  .picks-caption {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 18px 8px;
 
-    .featured-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .featured-sub {
-      font-size: 11px;
+    .picks-sub {
       color: var(--text-hint);
+      font-size: 11px;
     }
   }
 
-  .featured-scroll {
+  .picks-scroll {
     display: flex;
     overflow-x: auto;
-    gap: 10px;
-    padding: 2px 16px 6px;
+    gap: 16px;
     -webkit-overflow-scrolling: touch;
 
-    &::-webkit-scrollbar { display: none; }
-
-    .featured-card {
-      flex-shrink: 0;
-      width: 210px;
-      padding: 12px 14px;
-      border-radius: 16px;
-      background: linear-gradient(145deg, #ffffff, #f3faf7);
-      border: 1px solid rgba(16, 163, 127, 0.16);
-      box-shadow: 0 8px 20px -12px rgba(16, 163, 127, 0.22);
-      cursor: pointer;
-
-      .feat-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 6px;
-
-        .feat-cat {
-          font-size: 11px;
-          color: var(--primary-dark);
-          font-weight: 600;
-        }
-
-        .feat-match {
-          font-size: 10px;
-          font-weight: 600;
-          padding: 1px 6px;
-          border-radius: 999px;
-          background: var(--primary);
-          color: #fff;
-        }
-      }
-
-      .feat-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 6px;
-      }
-
-      .feat-meta {
-        display: flex;
-        justify-content: space-between;
-        font-size: 11px;
-        color: var(--text-hint);
-        margin-bottom: 6px;
-      }
-
-      .feat-reasons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-
-        .feat-reason-tag {
-          font-size: 10px;
-          padding: 1px 6px;
-          border-radius: 6px;
-          background: rgba(16, 163, 127, 0.1);
-          color: #0d8a6a;
-        }
-      }
+    &::-webkit-scrollbar {
+      display: none;
     }
   }
+
+  .pick-item {
+    flex: 0 0 176px;
+    border-left: 2px solid var(--primary);
+    padding-left: 10px;
+    cursor: pointer;
+    transition: opacity 0.18s var(--ease);
+
+    &:active {
+      opacity: 0.72;
+    }
+
+    .pick-score {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 3px;
+
+      .dot-sep {
+        margin: 0 4px;
+        opacity: 0.6;
+      }
+    }
+
+    .pick-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.35;
+      margin-bottom: 2px;
+    }
+
+    .pick-note {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+  }
+}
+
+/* 分类文字下划线导航 */
+.text-tabs-wrap {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-page);
+}
+
+.text-tabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 20px;
+  padding: 12px 20px 0;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  .t-tab {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-hint);
+    padding-bottom: 10px;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.18s var(--ease), border-color 0.2s var(--ease);
+
+    &.active {
+      color: var(--text-primary);
+      font-weight: 600;
+      border-bottom-color: var(--text-primary);
+    }
+  }
+}
+
+/* 次级时间与排序微栏 */
+.sub-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 6px;
+  border-bottom: 1px solid var(--border-light);
+
+  .time-links,
+  .sort-links {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .time-link,
+  .sort-link {
+    font-size: 12px;
+    color: var(--text-hint);
+    cursor: pointer;
+    transition: color 0.18s var(--ease);
+
+    &.active {
+      color: var(--primary);
+      font-weight: 600;
+    }
+  }
+
+  .sort-link.active {
+    color: var(--text-primary);
+  }
+}
+
+/* 主流式列表容器 */
+.stream-container {
+  padding: 0 20px 24px;
+  background: var(--bg-page);
 }
 </style>

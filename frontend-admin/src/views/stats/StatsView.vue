@@ -291,7 +291,7 @@ const createLineOption = (title, data) => ({
       },
       data: data.map(item => item.count || item.value),
       itemStyle: {
-        color: '#10a37f'
+        color: '#c85a32'
       }
     }
   ]
@@ -487,7 +487,7 @@ const loadRetention = async () => {
           type: 'line',
           smooth: true,
           data: data.map(item => item.d1Rate),
-          itemStyle: { color: '#10a37f' }
+          itemStyle: { color: '#c85a32' }
         },
         {
           name: '7日留存',
@@ -549,8 +549,8 @@ const loadFunnel = async () => {
           value: d.count,
           itemStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-              { offset: 0, color: ['#10a37f', '#0ea5e9', '#9333ea', '#f5a623'][index] || '#10a37f' },
-              { offset: 1, color: ['#34d399', '#38bdf8', '#c084fc', '#fbbf24'][index] || '#34d399' }
+              { offset: 0, color: ['#c85a32', '#3b7a57', '#4b6b88', '#b47b2b'][index] || '#c85a32' },
+              { offset: 1, color: ['#e4a38a', '#7aa98f', '#89a3bb', '#d9b579'][index] || '#e4a38a' }
             ]),
             borderRadius: [0, 4, 4, 0]
           }

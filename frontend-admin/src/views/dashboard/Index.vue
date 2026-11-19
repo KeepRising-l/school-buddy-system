@@ -5,8 +5,8 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon" style="background: #10a37f">
-              <el-icon :size="28"><User /></el-icon>
+            <div class="stat-icon" style="background: #f9ebe5; color: #c85a32">
+              <el-icon :size="24"><User /></el-icon>
             </div>
             <div class="stat-info">
               <el-statistic title="总用户数" :value="overview.totalUsers" />
@@ -17,8 +17,8 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon" style="background: #0ea5e9">
-              <el-icon :size="28"><Document /></el-icon>
+            <div class="stat-icon" style="background: #efece4; color: #1c1b18">
+              <el-icon :size="24"><Document /></el-icon>
             </div>
             <div class="stat-info">
               <el-statistic title="总帖子数" :value="overview.totalPosts" />
@@ -29,8 +29,8 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon" style="background: #f5a623">
-              <el-icon :size="28"><EditPen /></el-icon>
+            <div class="stat-icon" style="background: #f8f1e4; color: #b47b2b">
+              <el-icon :size="24"><EditPen /></el-icon>
             </div>
             <div class="stat-info">
               <el-statistic title="今日发帖" :value="overview.todayPosts" />
@@ -41,8 +41,8 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon" style="background: #9333ea">
-              <el-icon :size="28"><Trophy /></el-icon>
+            <div class="stat-icon" style="background: #eaf3ee; color: #3b7a57">
+              <el-icon :size="24"><Trophy /></el-icon>
             </div>
             <div class="stat-info">
               <el-statistic title="成功组局数" :value="overview.successMatches" />
@@ -103,6 +103,7 @@ const loadCategoryChart = async () => {
     // 复用已存在的图表实例，避免重复 init 造成内存泄漏
     pieChart = echarts.getInstanceByDom(pieChartRef.value) || echarts.init(pieChartRef.value)
     pieChart.setOption({
+      color: ['#c85a32', '#3b7a57', '#b47b2b', '#4b6b88', '#8c857b'],
       tooltip: {
         trigger: 'item',
         formatter: '{b}: {c} ({d}%)'

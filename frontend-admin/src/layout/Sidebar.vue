@@ -9,9 +9,9 @@
       :collapse="isCollapse"
       :collapse-transition="false"
       router
-      background-color="#14352c"
-      text-color="#a7c6bc"
-      active-text-color="#10a37f"
+      background-color="#1c1b18"
+      text-color="#b8b3a8"
+      active-text-color="#f9ebe5"
     >
       <el-menu-item index="/dashboard">
         <el-icon><DataAnalysis /></el-icon>
@@ -60,7 +60,7 @@ const activeMenu = computed(() => route.path)
 <style scoped lang="scss">
 .sidebar {
   height: 100vh;
-  background: #14352c;
+  background: #1c1b18;
   overflow-y: auto;
 
   .logo {
@@ -69,13 +69,14 @@ const activeMenu = computed(() => route.path)
     align-items: center;
     justify-content: center;
     gap: 8px;
-    color: #fff;
-    font-size: 16px;
-    font-weight: bold;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f7f5f0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 
     .el-icon {
-      color: #10a37f;
+      color: #c85a32;
     }
   }
 
@@ -83,15 +84,16 @@ const activeMenu = computed(() => route.path)
     border-right: none;
   }
 
-  // 选中项：柔翡翠底 + 白字
+  // 选中项：左侧陶土竖线 + 柔暖底
   :deep(.el-menu-item.is-active) {
-    background: rgba(16, 163, 127, 0.18);
-    color: #10a37f;
+    background: rgba(200, 90, 50, 0.16);
+    color: #ffffff;
     font-weight: 500;
+    box-shadow: inset 3px 0 0 #c85a32;
   }
 
   :deep(.el-menu-item:hover) {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.05);
   }
 }
 </style>

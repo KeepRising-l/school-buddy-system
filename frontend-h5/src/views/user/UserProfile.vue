@@ -298,7 +298,7 @@ onMounted(() => {
           border-radius: 999px;
           font-weight: 500;
 
-          &.badge-excellent { background: rgba(16,163,127,0.12); color: #10a37f; }
+          &.badge-excellent { background: var(--primary-soft); color: var(--primary); }
           &.badge-good { background: rgba(59,130,246,0.12); color: #3b82f6; }
           &.badge-normal { background: rgba(245,158,11,0.12); color: #d97706; }
           &.badge-warning { background: rgba(239,68,68,0.12); color: #ef4444; }
@@ -347,7 +347,7 @@ onMounted(() => {
       padding: 4px 12px;
       border-radius: 999px;
 
-      &.tag-positive { background: rgba(16,163,127,0.1); color: #10a37f; }
+      &.tag-positive { background: var(--primary-soft); color: var(--primary); }
       &.tag-negative { background: rgba(239,68,68,0.1); color: #ef4444; }
       &.tag-neutral { background: rgba(107,114,128,0.1); color: #6b7280; }
     }

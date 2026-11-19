@@ -1,53 +1,54 @@
 // ============================================================
-// 管理端全局样式 —— 与 H5 统一的高端柔和风（Soft Structuralism）
-// 主色翡翠 #10A37F · 冷银白背景 · 柔和圆角
+// 管理端全局样式 —— 与 H5 统一的暖砂纸本 · 编辑级风格（Warm Editorial）
+// 主色陶土赭石 #C85A32 · 暖砂纸底 #F7F5F0 · 极细分割线 #E2DDD3 · 墨黑 #1C1B18
 // ============================================================
 
-// ----- Element Plus 主题覆写（CSS 变量，全局生效）-----
 :root {
   // 主色（Element Plus 变量体系）
-  --el-color-primary: #10a37f;
-  --el-color-primary-light-3: #43b899;
-  --el-color-primary-light-5: #72ccb2;
-  --el-color-primary-light-7: #a5dfcd;
-  --el-color-primary-light-8: #c2e9dd;
-  --el-color-primary-light-9: #e9f7f2;
-  --el-color-primary-dark-2: #0d8a6b;
+  --el-color-primary: #c85a32;
+  --el-color-primary-light-3: #d98261;
+  --el-color-primary-light-5: #e4a38a;
+  --el-color-primary-light-7: #efc4b3;
+  --el-color-primary-light-8: #f5d8cc;
+  --el-color-primary-light-9: #f9ebe5;
+  --el-color-primary-dark-2: #a94825;
 
-  // 语义色微调（更柔和）
-  --el-color-success: #10a37f;
-  --el-color-success-light-9: #e9f7f2;
-  --el-color-warning: #f5a623;
-  --el-color-warning-light-9: #fdf3e0;
-  --el-color-danger: #e5484d;
-  --el-color-danger-light-9: #fcedee;
-  --el-color-info: #9ca3af;
-  --el-color-info-light-9: #f3f4f6;
+  // 语义色（低饱和纸本墨色系）
+  --el-color-success: #3b7a57;
+  --el-color-success-light-9: #eaf3ee;
+  --el-color-warning: #b47b2b;
+  --el-color-warning-light-9: #f8f1e4;
+  --el-color-danger: #b83a2d;
+  --el-color-danger-light-9: #f9eae8;
+  --el-color-info: #78756e;
+  --el-color-info-light-9: #efece4;
 
   // 文字与背景
-  --el-text-color-primary: #14161a;
-  --el-text-color-regular: #374151;
-  --el-text-color-secondary: #6b7280;
-  --el-text-color-placeholder: #9ca3af;
+  --el-text-color-primary: #1c1b18;
+  --el-text-color-regular: #3c3a35;
+  --el-text-color-secondary: #57544e;
+  --el-text-color-placeholder: #78756e;
 
-  // 圆角
-  --el-border-radius-base: 10px;
-  --el-border-radius-small: 8px;
+  // 克制圆角
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
   --el-border-radius-round: 999px;
 
-  // 边框
-  --el-border-color: rgba(0, 0, 0, 0.08);
-  --el-border-color-light: rgba(0, 0, 0, 0.06);
-  --el-border-color-lighter: rgba(0, 0, 0, 0.04);
+  // 极细分割线边框
+  --el-border-color: #e2ddd3;
+  --el-border-color-light: #eae5dc;
+  --el-border-color-lighter: #efece4;
 
-  // 主区背景
-  --el-bg-color-page: #f6f7f9;
-  --el-bg-color: #ffffff;
+  // 纸本背景
+  --el-bg-color-page: #f7f5f0;
+  --el-bg-color: #fcfbf8;
+  --el-fill-color-blank: #fcfbf8;
+  --el-fill-color-light: #f3f0e8;
 
-  // 阴影（更扩散柔和）
-  --el-box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.12);
-  --el-box-shadow-light: 0 8px 20px -12px rgba(0, 0, 0, 0.08);
-  --el-box-shadow-lighter: 0 4px 12px -8px rgba(0, 0, 0, 0.06);
+  // 阴影（克制无浮夸扩散）
+  --el-box-shadow: 0 8px 24px -16px rgba(28, 27, 24, 0.14);
+  --el-box-shadow-light: 0 4px 12px -8px rgba(28, 27, 24, 0.08);
+  --el-box-shadow-lighter: 0 2px 6px -4px rgba(28, 27, 24, 0.06);
 }
 
 * {
@@ -61,9 +62,10 @@ body,
 #app {
   width: 100%;
   height: 100%;
-  font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'MiSans', 'Helvetica Neue',
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'HarmonyOS Sans SC',
     'Microsoft YaHei', sans-serif;
   background: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -74,11 +76,11 @@ body,
   height: 6px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: #d5cfc4;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #b4afa4;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -103,24 +105,28 @@ body,
   justify-content: flex-end;
 }
 
-// 卡片基础：柔和圆角 + 扩散阴影 + 内高光（Double-Bezel 质感）
+// 卡片基础：宣纸白 + 1px 极细发丝边，去厚重浮夸阴影
 .el-card {
-  --el-card-border-radius: 16px;
-  border-color: var(--el-border-color-lighter);
-  box-shadow: 0 16px 32px -20px rgba(0, 0, 0, 0.08),
-    inset 0 1px 1px rgba(255, 255, 255, 0.7);
-  transition: box-shadow 0.3s cubic-bezier(0.32, 0.72, 0, 1),
-    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  --el-card-border-radius: 8px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  box-shadow: none;
+  transition: border-color 0.2s ease;
 
   &:hover {
-    box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.12),
-      inset 0 1px 1px rgba(255, 255, 255, 0.7);
+    border-color: #d0c9bc;
+    box-shadow: none;
   }
 }
 
-// 管理端登录页氛围：渐变背景
+.el-header {
+  background: #fcfbf8 !important;
+  border-bottom: 1px solid #e2ddd3 !important;
+}
+
+// 管理端登录页：静谧暖砂纸底
 .login-container {
-  background: linear-gradient(160deg, #f6f7f9 0%, #e9f7f2 55%, #fdf3e0 100%) !important;
+  background: #f7f5f0 !important;
 }
 
 // 无障碍：尊重系统减弱动效

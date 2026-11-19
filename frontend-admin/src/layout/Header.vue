@@ -70,7 +70,7 @@ const handleCommand = (command) => {
     .collapse-btn {
       font-size: 20px;
       cursor: pointer;
-      &:hover { color: #10a37f; }
+      &:hover { color: #c85a32; }
     }
   }
 

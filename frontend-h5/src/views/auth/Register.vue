@@ -3,7 +3,7 @@
     <!-- 顶部标题 -->
     <div class="header">
       <div class="logo-icon">
-        <van-icon name="friends-o" size="28" color="#10a37f" />
+        <van-icon name="friends-o" size="28" color="var(--primary)" />
       </div>
       <h1 class="page-title">注册账号</h1>
       <p class="page-desc">加入校园搭子，找到志同道合的伙伴</p>
@@ -212,8 +212,7 @@ const handleRegister = async () => {
     align-items: center;
     justify-content: center;
     margin: 0 auto 18px;
-    box-shadow: 0 20px 40px -20px rgba(16, 163, 127, 0.35);
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--border-color);
   }
 
   .page-title {
@@ -274,10 +273,9 @@ const handleRegister = async () => {
     margin-top: 24px;
     background: var(--primary);
     border: none;
-    height: 46px;
-    font-size: 16px;
-    font-weight: 500;
-    box-shadow: 0 16px 32px -12px rgba(16, 163, 127, 0.35);
+    height: 44px;
+    font-size: 15px;
+    font-weight: 600;
   }
 }
 

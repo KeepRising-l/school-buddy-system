@@ -1,18 +1,20 @@
 <template>
   <div class="page-with-tabbar">
     <slot />
-    <van-tabbar v-model="active" route active-color="#10a37f" inactive-color="#9ca3af" class="main-tabbar">
-      <van-tabbar-item to="/square" icon="home-o">广场</van-tabbar-item>
-      <van-tabbar-item to="/post/create" class="publish-item">
-        <template #icon>
-          <div class="publish-btn">
-            <van-icon name="plus" />
-          </div>
-        </template>
-        发布
-      </van-tabbar-item>
-      <van-tabbar-item to="/mine" icon="user-o" :badge="unreadCount > 0 ? unreadCount : undefined">我的</van-tabbar-item>
-    </van-tabbar>
+    <nav class="editorial-tabbar">
+      <router-link to="/square" class="e-tab-item" active-class="is-active">
+        <span class="e-tab-label">日程</span>
+      </router-link>
+
+      <router-link to="/post/create" class="e-tab-item e-tab-create" active-class="is-active">
+        <span class="e-tab-label">+ 写新组局</span>
+      </router-link>
+
+      <router-link to="/mine" class="e-tab-item" active-class="is-active">
+        <span class="e-tab-label">我的</span>
+        <span v-if="unreadCount > 0" class="e-unread-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+      </router-link>
+    </nav>
   </div>
 </template>
 
@@ -21,7 +23,6 @@ import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/store/user'
 import request from '@/api/request'
 
-const active = ref(0)
 const userStore = useUserStore()
 const unreadCount = ref(0)
 
@@ -41,63 +42,82 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.main-tabbar {
-  // 悬浮胶囊：离底 12px + 底部安全区，全 pill 圆角，毛玻璃。
-  // 这里不用 Vant 的 safe-area-inset-bottom 属性——它加的是胶囊"内部"下内边距，
-  // 会让胶囊变高、下方留出空白；改为整体上移，视觉更干净，也顺带解决大屏居中。
+.editorial-tabbar {
   position: fixed;
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(12px + var(--safe-bottom));
-  width: min(calc(100% - 32px), calc(var(--app-max-width) - 32px));
-  // Vant 给 .van-tabbar 设了 box-sizing: content-box，会把 1px 边框加到宽度外，
-  // 导致左右边距各少 1px；这里显式改回 border-box，让上面的 width 就是最终宽度
-  box-sizing: border-box;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  box-shadow: 0 20px 48px -24px rgba(0, 0, 0, 0.18);
+  width: min(100%, var(--app-max-width));
+  height: calc(54px + var(--safe-bottom));
+  padding: 0 16px var(--safe-bottom);
+  background: rgba(247, 245, 240, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  align-items: center;
+  z-index: 100;
 
-  .publish-item {
-    :deep(.van-tabbar-item__icon) {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+  .e-tab-item {
+    position: relative;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-hint);
+    transition: color 0.18s var(--ease), transform 0.15s var(--ease);
+
+    &:active {
+      transform: scale(0.96);
     }
 
-    // 选中（进入发布页）时 + 号旋转 45° 成 ×，动能反馈
-    &.van-tabbar-item--active {
-      .publish-btn {
-        transform: rotate(45deg);
-        background: var(--primary-dark);
+    &.is-active {
+      color: var(--text-primary);
+      font-weight: 600;
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 24px;
+        height: 2px;
+        background: var(--text-primary);
       }
     }
   }
 
-  .publish-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--primary-gradient);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 8px 16px -6px rgba(16, 163, 127, 0.5);
-    transition: transform 0.4s var(--ease), background 0.3s var(--ease),
-      box-shadow 0.3s var(--ease);
+  .e-tab-create {
+    color: var(--primary);
+    font-weight: 600;
 
-    .van-icon {
-      color: #fff;
-      font-size: 16px;
-      font-weight: bold;
-      transition: transform 0.4s var(--ease);
-    }
+    &.is-active {
+      color: var(--primary-dark);
 
-    &:active {
-      transform: scale(0.92);
+      &::after {
+        background: var(--primary);
+      }
     }
+  }
+
+  .e-unread-badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #ffffff;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
   }
 }
 </style>

@@ -1,58 +1,57 @@
 // ============================================================
-// 设计 Token —— 高端柔和风（Soft Structuralism）
-// 主色 #10A37F 深翡翠 · 冷银白背景 · 扩散阴影 · squircle 圆角
+// 设计 Token —— 暖砂纸本 · 编辑级流式排版（Warm Editorial）
+// 主色 #C85A32 陶土赭石 · 暖砂纸底 #F7F5F0 · 1px 浅灰细线 · 温润墨黑 #1C1B18
 // ============================================================
 :root {
-  // ----- 品牌色 -----
-  --primary: #10a37f;
-  --primary-dark: #0d8a6b;
-  --primary-soft: #e9f7f2; // 柔和翡翠底（chip active / 浅色 tag）
-  --primary-gradient: linear-gradient(135deg, #10a37f 0%, #0d8a6b 100%);
+  // ----- 品牌色（全屏单一克制强调色，占比 < 8%）-----
+  --primary: #c85a32;
+  --primary-dark: #a94825;
+  --primary-soft: #f9ebe5; // 柔陶土浅底（轻按钮 / 轻量标签）
+  --primary-gradient: linear-gradient(135deg, #c85a32 0%, #b44d27 100%);
 
-  // ----- 语义色 -----
-  --danger: #e5484d;
-  --warning: #f5a623;
-  --success: #10a37f;
-  --info: #3b82f6;
+  // ----- 语义色（低饱和纸本墨色系）-----
+  --danger: #b83a2d;
+  --warning: #b47b2b;
+  --success: #3b7a57;
+  --info: #4b6b88;
 
-  // ----- 表面 -----
-  --bg-page: #f6f7f9;
-  --bg-card: #ffffff;
-  --bg-grey: #f3f4f6;
+  // ----- 纸本表面 -----
+  --bg-page: #f7f5f0;      // 暖砂纸本主底色
+  --bg-card: #fcfbf8;      // 极浅宣纸白（融入纸底）
+  --bg-grey: #efece4;      // 暖砂次级底块（推荐区 / 输入框）
 
-  // ----- 文字 -----
-  --text-primary: #14161a;
-  --text-secondary: #6b7280;
-  --text-hint: #9ca3af;
-  --text-disabled: #c7cad1;
+  // ----- 墨色文字层级 -----
+  --text-primary: #1c1b18;    // 温润暖墨黑
+  --text-secondary: #57544e;  // 深亚麻灰
+  --text-hint: #78756e;       // 亚麻灰
+  --text-disabled: #b4afa4;
 
-  // ----- 边框 -----
-  --border-color: rgba(0, 0, 0, 0.08);
-  --border-light: rgba(0, 0, 0, 0.04);
+  // ----- 极细发丝分割线 -----
+  --border-color: #e2ddd3;
+  --border-light: #eae5dc;
 
-  // ----- 阴影（极度扩散）-----
-  --shadow-card: 0 20px 40px -20px rgba(0, 0, 0, 0.08);
-  --shadow-card-hover: 0 24px 48px -20px rgba(0, 0, 0, 0.12);
-  --shadow-float: 0 20px 48px -24px rgba(16, 163, 127, 0.3);
-  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.04);
-  // 内高光（Double-Bezel 内核对光，技能 soft-skill §4A）
-  --shadow-inset-highlight: inset 0 1px 1px rgba(255, 255, 255, 0.6);
-  // 外壳阴影（双嵌套外框）
-  --shadow-shell: 0 2px 6px rgba(0, 0, 0, 0.03);
+  // ----- 阴影（极度克制，去厚重浮夸阴影）-----
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 16px -8px rgba(28, 27, 24, 0.08);
+  --shadow-float: 0 8px 20px -10px rgba(200, 90, 50, 0.25);
+  --shadow-soft: 0 1px 4px rgba(28, 27, 24, 0.04);
+  --shadow-inset-highlight: none;
+  --shadow-shell: none;
 
-  // ----- 圆角 -----
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
+  // ----- 克制圆角与等宽字体 -----
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-round: 999px;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', 'Consolas', 'Courier New', monospace;
 
   // ----- 动效 -----
-  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --transition: all 0.3s var(--ease);
+  --transition: all 0.22s var(--ease);
 
-  // ----- 间距尺度（frontend-ui-engineering 技能 §Spacing）-----
+  // ----- 间距尺度 -----
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -62,85 +61,83 @@
   --space-8: 32px;
 
   // ----- 移动端适配 -----
-  // 安全区高度：依赖 index.html 的 viewport-fit=cover 才非 0（非全面屏为 0，不影响普通机型）
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  // H5 的最大宽度：超过后在屏幕中居中（PC / 平板打开时不把卡片拉成超宽条）
   --app-max-width: 480px;
 
   // ============================================================
-  // Vant 4 主题覆写（不改组件源码，全走 CSS 变量）
+  // Vant 4 主题覆写（暖砂纸本体系）
   // ============================================================
-  --van-primary-color: #10a37f;
-  --van-success-color: #10a37f;
-  --van-warning-color: #f5a623;
-  --van-danger-color: #e5484d;
-  --van-background: #f6f7f9;
-  --van-background-2: #ffffff;
-  --van-background-3: #ffffff;
-  --van-text-color: #14161a;
-  --van-text-color-2: #6b7280;
-  --van-text-color-3: #9ca3af;
-  --van-border-color: rgba(0, 0, 0, 0.08);
-  --van-active-color: rgba(0, 0, 0, 0.04);
+  --van-primary-color: #c85a32;
+  --van-success-color: #3b7a57;
+  --van-warning-color: #b47b2b;
+  --van-danger-color: #b83a2d;
+  --van-background: #f7f5f0;
+  --van-background-2: #fcfbf8;
+  --van-background-3: #efece4;
+  --van-text-color: #1c1b18;
+  --van-text-color-2: #57544e;
+  --van-text-color-3: #78756e;
+  --van-border-color: #e2ddd3;
+  --van-active-color: rgba(28, 27, 24, 0.04);
   --van-active-opacity: 0.85;
 
-  // Button —— pill 全圆角
-  --van-button-border-radius: 999px;
-  --van-button-primary-background: #10a37f;
-  --van-button-primary-border-color: #10a37f;
+  // Button —— 利落 6px 圆角
+  --van-button-border-radius: 6px;
+  --van-button-primary-background: #c85a32;
+  --van-button-primary-border-color: #c85a32;
 
-  // NavBar
-  --van-nav-bar-height: 48px;
-  --van-nav-bar-background: #ffffff;
-  --van-nav-bar-icon-color: #14161a;
+  // NavBar —— 暖砂纸面顶栏 + 1px 极细底线
+  --van-nav-bar-height: 50px;
+  --van-nav-bar-background: #f7f5f0;
+  --van-nav-bar-icon-color: #1c1b18;
   --van-nav-bar-title-font-size: 16px;
-  --van-nav-bar-title-text-color: #14161a;
+  --van-nav-bar-title-text-color: #1c1b18;
 
   // Field
-  --van-field-label-color: #14161a;
-  --van-field-input-text-color: #14161a;
-  --van-field-placeholder-text-color: #9ca3af;
-  --van-field-clear-icon-color: #c7cad1;
+  --van-field-label-color: #1c1b18;
+  --van-field-input-text-color: #1c1b18;
+  --van-field-placeholder-text-color: #6e6a63;
+  --van-field-clear-icon-color: #8d887f;
 
   // Cell / CellGroup
-  --van-cell-background: #ffffff;
-  --van-cell-text-color: #14161a;
+  --van-cell-background: #fcfbf8;
+  --van-cell-text-color: #1c1b18;
   --van-cell-group-background: transparent;
 
-  // Tabbar（悬浮胶囊在组件内覆盖，这里兜底）
-  --van-tabbar-background: rgba(255, 255, 255, 0.88);
-  --van-tabbar-item-text-color: #9ca3af;
-  --van-tabbar-item-active-color: #10a37f;
+  // Tabbar
+  --van-tabbar-background: #f7f5f0;
+  --van-tabbar-item-text-color: #78756e;
+  --van-tabbar-item-active-color: #1c1b18;
 
   // Tabs
   --van-tabs-nav-background: transparent;
-  --van-tab-text-color: #9ca3af;
-  --van-tab-active-text-color: #14161a;
-  --van-tabs-bottom-bar-color: #10a37f;
-  --van-tabs-bottom-bar-width: 1em;
-  --van-tabs-bottom-bar-height: 3px;
+  --van-tab-text-color: #78756e;
+  --van-tab-active-text-color: #1c1b18;
+  --van-tabs-bottom-bar-color: #1c1b18;
+  --van-tabs-bottom-bar-width: 1.4em;
+  --van-tabs-bottom-bar-height: 2px;
 
   // Tag
-  --van-tag-primary-color: #10a37f;
-  --van-tag-success-color: #10a37f;
-  --van-tag-warning-color: #f5a623;
-  --van-tag-danger-color: #e5484d;
-  --van-tag-default-color: #9ca3af;
-  --van-tag-plain-background: #ffffff;
+  --van-tag-primary-color: #c85a32;
+  --van-tag-success-color: #3b7a57;
+  --van-tag-warning-color: #b47b2b;
+  --van-tag-danger-color: #b83a2d;
+  --van-tag-default-color: #78756e;
+  --van-tag-plain-background: transparent;
   --van-tag-text-color: #ffffff;
 
   // Search
   --van-search-background: transparent;
-  --van-search-content-background: #f3f4f6;
+  --van-search-content-background: #efece4;
 
   // Popup / Dialog / Toast
-  --van-popup-background: #ffffff;
-  --van-dialog-background: #ffffff;
-  --van-toast-background: rgba(20, 22, 26, 0.85);
+  --van-popup-background: #fcfbf8;
+  --van-dialog-background: #fcfbf8;
+  --van-toast-background: rgba(28, 27, 24, 0.88);
 
   // Switch
-  --van-switch-on-background: #10a37f;
+  --van-switch-on-background: #c85a32;
 }
 
 // ----- 基础重置 -----
@@ -151,7 +148,6 @@
 }
 
 html {
-  // 防止系统「大字体」设置或横屏时浏览器二次放大字号，导致布局被撑破
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -160,9 +156,8 @@ html,
 body {
   width: 100%;
   min-height: 100vh;
-  // dvh = 动态视口高度：移动端地址栏收起/展开时 100vh 不跟着变，底部会出现被裁或闪动
   min-height: 100dvh;
-  font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'MiSans', 'Helvetica Neue',
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'HarmonyOS Sans SC',
     'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -171,13 +166,12 @@ body {
 }
 
 body {
-  // 大屏（PC / 平板）下两侧的底色，只在 H5 列之外露出
-  background: #e8eaed;
-  // 抑制 iOS 橡皮筋滚动与下拉刷新：它们会把 fixed 的悬浮胶囊 / 底部操作栏一起拖走
+  // 大屏（PC / 平板）下两侧的暖砂衬底
+  background: #eae6dc;
   overscroll-behavior-y: none;
 }
 
-// App 根容器：大屏居中 + 顶部安全区
+// App 根容器：大屏居中 + 极细纸边
 #app {
   position: relative;
   width: 100%;
@@ -186,15 +180,13 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--bg-page);
-  // 刘海屏 / 灵动岛：整体下移状态栏高度（底部由各 fixed 元素各自处理）
   padding-top: var(--safe-top);
-  // 大屏时给中间这条"H5 列"一点立体感，手机上看不到
-  box-shadow: 0 0 80px -40px rgba(0, 0, 0, 0.28);
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
 }
 
 // ----- 页面通用容器 -----
 .page {
-  // 减去 #app 的顶部安全区内边距：否则整页会比视口高出安全区那么多，产生多余的可滚动空白
   min-height: calc(100vh - var(--safe-top));
   min-height: calc(100dvh - var(--safe-top));
   background: var(--bg-page);
@@ -202,58 +194,42 @@ body {
 
 // 带底部导航的页面容器
 .page-with-tabbar {
-  // 84px 给悬浮胶囊留位，再叠加底部安全区（胶囊本身会被安全区顶上去）
-  padding-bottom: calc(84px + var(--safe-bottom));
+  padding-bottom: calc(64px + var(--safe-bottom));
 }
 
 // 内容区域
 .content {
-  padding: 12px 16px;
+  padding: 12px 20px;
 }
 
-// ----- 卡片：squircle + 扩散阴影（Double-Bezel 双嵌套，技能 soft-skill §4A）-----
+// ----- 纸本卡片（克制 1px 细边，去厚重阴影）-----
 .card {
   background: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: 18px;
-  margin-bottom: 14px;
-  box-shadow: var(--shadow-card), var(--shadow-inset-highlight);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  transition: box-shadow 0.3s var(--ease), transform 0.3s var(--ease),
-    border-color 0.3s var(--ease);
-
-  &:active {
-    transform: scale(0.985);
-  }
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease);
 }
 
-// ----- 双嵌套外壳（外层包裹容器，用于卡片/输入/图片）-----
+// ----- 兼容旧 .shell 容器，转为极简纸框 -----
 .shell {
-  border-radius: calc(var(--radius-lg) + 6px);
-  padding: 3px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.9),
-    rgba(243, 244, 246, 0.6)
-  );
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  box-shadow: var(--shadow-shell);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 
   > .card {
     margin-bottom: 0;
   }
 }
 
-// ----- 列表项入场动画（技能 §5C：轻量 fade-up，仅 transform/opacity）-----
+// ----- 列表项克制入场动画（仅首次轻柔渐入，不喧哗）-----
 .stagger-item {
   opacity: 0;
-  transform: translateY(12px);
-  animation: stagger-in 0.5s var(--ease-out) forwards;
+  transform: translateY(8px);
+  animation: stagger-in 0.36s var(--ease-out) forwards;
 
-  @for $i from 1 through 12 {
+  @for $i from 1 through 10 {
     &:nth-child(#{$i}) {
-      animation-delay: #{$i * 40}ms;
+      animation-delay: #{$i * 35}ms;
     }
   }
 }
@@ -265,24 +241,22 @@ body {
   }
 }
 
-// ----- Eyebrow 微型徽章（技能 §4C）-----
+// ----- Eyebrow 编辑眉标 -----
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
-  border-radius: var(--radius-round);
-  background: var(--primary-soft);
-  color: var(--primary-dark);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 // ----- 通用按钮触觉反馈（press scale）-----
 .van-button {
-  transition: transform 0.15s var(--ease), box-shadow 0.3s var(--ease),
-    opacity 0.2s var(--ease);
+  transition: transform 0.15s var(--ease), opacity 0.2s var(--ease),
+    background-color 0.2s var(--ease);
 
   &:active {
     transform: scale(0.97);
@@ -304,42 +278,41 @@ body {
 }
 
 // ----- 安全区域 -----
-// 显式工具类：用 !important 保证能覆盖组件自身的 padding 简写。
-// 注意它会把 padding-bottom 直接替换为安全区高度，所以**只能用在自身没有底部内边距的元素上**
-// （需要保留原内边距时，请在组件内写 padding-bottom: calc(原值 + var(--safe-bottom))）
 .safe-area-bottom {
   padding-bottom: var(--safe-bottom) !important;
 }
 
-// ----- 顶部安全区（需要自己铺满状态栏的整块头部用）-----
 .safe-area-top {
   padding-top: var(--safe-top) !important;
 }
 
 // ----- 通用过渡 -----
 .transition-all {
-  transition: all 0.3s var(--ease);
+  transition: all 0.22s var(--ease);
 }
 
 // ----- 分割线 -----
 .divider {
   height: 1px;
-  background: var(--border-light);
+  background: var(--border-color);
   margin: 12px 0;
 }
 
 // ----- 文字选中色 -----
 ::selection {
-  background: rgba(16, 163, 127, 0.2);
+  background: rgba(200, 90, 50, 0.16);
 }
 
-// ----- 路由过渡动画（App.vue 使用）-----
-// 只用 opacity，不加 transform：动画期间若元素带 transform，会给后代的 position: fixed
-// 元素制造一个新的定位基准（containing block），底部悬浮胶囊 / 操作栏会在切页瞬间
-// 相对"页面元素"而不是"视口"定位——页面一长它就跑到文档最底部，等于消失半秒。
+input::placeholder,
+textarea::placeholder {
+  color: #6e6a63 !important;
+  opacity: 1 !important;
+}
+
+// ----- 路由过渡动画 -----
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 0.22s var(--ease);
+  transition: opacity 0.2s var(--ease);
 }
 
 .page-fade-enter-from,
@@ -348,11 +321,8 @@ body {
 }
 
 // ============================================================
-// 移动端适配（2026-10 加固）
+// 移动端适配（保留 iOS 聚焦防缩放与大屏弹层居中加固）
 // ============================================================
-
-// iOS Safari 在聚焦 font-size < 16px 的输入框时会自动放大整个页面（Vant Field 默认 14px），
-// 这里把输入类控件提到 16px 规避；用 @supports 限定，只影响 iOS 内核
 @supports (-webkit-touch-callout: none) {
   input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
   textarea,
@@ -361,13 +331,6 @@ body {
   }
 }
 
-// 大屏（PC / 平板）下弹层跟随 H5 列的宽度，避免底部弹层铺满整个窗口、与居中的页面错位。
-// 不用 transform 定位是为了不破坏 Vant 自身的滑入动画。
-//
-// 这里必须用 body 前缀抬高优先级：Vant 的组件样式（vant/es/xxx/style）是随**懒加载的页面 chunk**
-// 之后才注入的，所以它比 global.scss 更靠后；只写 .van-popup--bottom 会在同优先级下被
-// Vant 的 `left: 0; width: 100%` 覆盖——实测表现是只剩 margin-left 生效，弹层整体左移半个列宽、
-// 宽度却仍是整屏（在 /post/create 的日期选择器上肉眼可见）。
 @media (min-width: 481px) {
   body .van-popup--bottom,
   body .van-popup--top {

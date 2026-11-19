@@ -282,12 +282,11 @@ onMounted(() => {
 }
 
 .save-btn {
-  margin-top: 32px;
+  margin-top: 28px;
   background: var(--primary);
   border: none;
-  height: 46px;
-  font-size: 16px;
-  font-weight: 500;
-  box-shadow: 0 16px 32px -12px rgba(16, 163, 127, 0.35);
+  height: 44px;
+  font-size: 15px;
+  font-weight: 600;
 }
 </style>

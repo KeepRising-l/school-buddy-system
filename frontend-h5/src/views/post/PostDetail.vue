@@ -1140,11 +1140,12 @@ onMounted(loadAll)
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 12px;
+    padding: 12px 14px;
     margin-bottom: 10px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
-    border: 1px solid rgba(16, 163, 127, 0.2);
+    border-radius: var(--radius-md);
+    background: var(--bg-grey);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--primary);
 
     .code-left {
       display: flex;
@@ -1154,24 +1155,25 @@ onMounted(loadAll)
       .code-title {
         font-size: 13px;
         font-weight: 600;
-        color: #065f46;
+        color: var(--text-primary);
       }
 
       .code-hint {
         font-size: 11px;
-        color: #047857;
+        color: var(--text-secondary);
       }
     }
 
     .code-digits {
-      font-size: 22px;
-      font-weight: 800;
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
       letter-spacing: 3px;
-      color: var(--primary-dark);
-      background: #fff;
+      color: var(--primary);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
       padding: 4px 10px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(16, 163, 127, 0.15);
+      border-radius: var(--radius-sm);
     }
   }
 
@@ -1212,9 +1214,10 @@ onMounted(loadAll)
   .ai-icebreaker-box {
     margin-top: 10px;
     padding: 10px 12px;
-    border-radius: 12px;
-    background: #f8fafc;
-    border: 1px dashed rgba(16, 163, 127, 0.35);
+    border-radius: var(--radius-md);
+    background: var(--bg-grey);
+    border: 1px solid var(--border-color);
+    border-left: 2px solid var(--primary);
 
     .ice-header {
       display: flex;
@@ -1326,12 +1329,12 @@ onMounted(loadAll)
   left: 50%;
   transform: translateX(-50%);
   width: min(100%, var(--app-max-width));
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(247, 245, 240, 0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   // 底部安全区：全面屏手势条高度，避免按钮被系统手势区盖住
   padding: 10px 16px calc(10px + var(--safe-bottom));
-  border-top: 1px solid var(--border-light);
+  border-top: 1px solid var(--border-color);
 
   .fav-btn {
     display: inline-flex;
@@ -1375,7 +1378,6 @@ onMounted(loadAll)
 
     .van-button--primary {
       border: none;
-      box-shadow: 0 12px 24px -12px rgba(16, 163, 127, 0.4);
     }
   }
 

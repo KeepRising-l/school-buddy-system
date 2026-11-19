@@ -74,7 +74,7 @@
       <template v-else>
         <div class="not-logged">
           <div class="not-logged-icon">
-            <van-icon name="user-o" size="48" color="#10a37f" />
+            <van-icon name="user-o" size="48" color="var(--primary)" />
           </div>
           <p class="not-logged-text">登录后查看更多内容</p>
           <van-button type="primary" round to="/login" class="login-btn">去登录</van-button>
@@ -308,8 +308,8 @@ onMounted(() => {
     background: var(--primary);
     border: none;
     height: 44px;
-    font-size: 16px;
-    box-shadow: 0 16px 32px -12px rgba(16, 163, 127, 0.35);
+    font-size: 15px;
+    font-weight: 600;
   }
 }
 </style>

@@ -230,7 +230,7 @@ onMounted(() => {
         }
       }
 
-      .icon-green { background: #10a37f; }
+      .icon-green { background: var(--success); }
       .icon-blue { background: #3b82f6; }
       .icon-orange { background: #f59e0b; }
       .icon-purple { background: #8b5cf6; }

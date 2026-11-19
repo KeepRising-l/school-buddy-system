@@ -664,11 +664,11 @@ onMounted(() => {
 
 .ai-composer-card {
   margin-bottom: 14px;
-  padding: 14px;
-  border-radius: 18px;
-  background: linear-gradient(145deg, #ecfdf5 0%, #ffffff 65%);
-  border: 1px solid rgba(16, 163, 127, 0.25);
-  box-shadow: 0 10px 24px -14px rgba(16, 163, 127, 0.28);
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-grey);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary);
 
   .ai-header {
     display: flex;
@@ -678,8 +678,8 @@ onMounted(() => {
 
     .ai-badge {
       font-size: 14px;
-      font-weight: 700;
-      color: var(--primary-dark);
+      font-weight: 600;
+      color: var(--text-primary);
     }
 
     .ai-sub {
@@ -689,9 +689,9 @@ onMounted(() => {
   }
 
   .ai-input {
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(16, 163, 127, 0.18);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     padding: 8px 10px;
     margin-bottom: 8px;
   }
@@ -704,11 +704,11 @@ onMounted(() => {
 
     .quick-chip {
       font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: #fff;
+      padding: 3px 9px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-card);
       color: var(--text-secondary);
-      border: 1px solid var(--border-light);
+      border: 1px solid var(--border-color);
       cursor: pointer;
     }
   }
@@ -736,17 +736,17 @@ onMounted(() => {
     font-weight: 600;
     color: var(--primary);
     cursor: pointer;
-    padding: 2px 8px;
-    border-radius: 999px;
+    padding: 3px 9px;
+    border-radius: var(--radius-sm);
     background: var(--primary-soft);
   }
 }
 
 .form-field {
   margin-bottom: 1px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--bg-card);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-color);
 
   :deep(.van-field__label) {
     color: var(--text-primary);
@@ -755,12 +755,11 @@ onMounted(() => {
 }
 
 .submit-btn {
-  margin-top: 32px;
+  margin-top: 28px;
   background: var(--primary);
   border: none;
-  height: 46px;
-  font-size: 16px;
-  font-weight: 500;
-  box-shadow: 0 16px 32px -12px rgba(16, 163, 127, 0.35);
+  height: 44px;
+  font-size: 15px;
+  font-weight: 600;
 }
 </style>

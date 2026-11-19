@@ -3,7 +3,7 @@
     <div class="login-card">
       <div class="login-header">
         <div class="logo-shell">
-          <el-icon :size="26" color="#10a37f"><Flag /></el-icon>
+          <el-icon :size="24" color="#c85a32"><Flag /></el-icon>
         </div>
         <h2>校园搭子预约系统</h2>
         <p>管理后台</p>
@@ -94,38 +94,39 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #10a37f 0%, #0d8a6b 45%, #14352c 100%);
+  background: #f7f5f0;
 
   .login-card {
     // 窄屏（手机）下不再硬撑 400px，避免横向溢出
     width: min(400px, calc(100vw - 32px));
-    padding: 40px;
-    background: #fff;
-    border-radius: 20px;
-    box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.25);
+    padding: 36px 32px;
+    background: #fcfbf8;
+    border: 1px solid #e2ddd3;
+    border-radius: 8px;
+    box-shadow: 0 12px 32px -20px rgba(28, 27, 24, 0.12);
 
     .login-header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
 
       .logo-shell {
-        width: 56px;
-        height: 56px;
-        border-radius: 18px;
-        background: #e9f7f2;
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        background: #f9ebe5;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 16px;
+        margin: 0 auto 14px;
       }
 
-      h2 { margin: 12px 0 4px; color: #14161a; font-size: 20px; }
-      p { color: #9ca3af; font-size: 14px; }
+      h2 { margin: 10px 0 4px; color: #1c1b18; font-size: 20px; font-weight: 600; }
+      p { color: #78756e; font-size: 13px; }
     }
 
     .login-tip {
       text-align: center;
-      color: #9ca3af;
+      color: #6b6760;
       font-size: 12px;
       margin-top: 16px;
 
